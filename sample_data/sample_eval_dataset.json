@@ -1,0 +1,27 @@
+[
+  {
+    "question": "What is machine learning?",
+    "ground_truth_answer": "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without explicit programming.",
+    "ground_truth_contexts": ["Machine learning is a subset of artificial intelligence that provides systems the ability to automatically learn and improve from experience without being explicitly programmed."]
+  },
+  {
+    "question": "What is Retrieval-Augmented Generation?",
+    "ground_truth_answer": "RAG is an AI framework that combines a retrieval component with a generative language model to produce accurate, grounded responses.",
+    "ground_truth_contexts": ["Retrieval-Augmented Generation (RAG) is an AI framework that combines a retrieval component with a generative language model."]
+  },
+  {
+    "question": "What are vector databases used for?",
+    "ground_truth_answer": "Vector databases store high-dimensional vectors for semantic similarity search and are used in RAG systems to find relevant documents.",
+    "ground_truth_contexts": ["Vector databases store data as high-dimensional vectors, enabling semantic similarity search. They are widely used in RAG systems."]
+  },
+  {
+    "question": "What is deep learning?",
+    "ground_truth_answer": "Deep learning is a subset of machine learning based on artificial neural networks that can match human expert performance on tasks like image classification.",
+    "ground_truth_contexts": ["Deep learning is part of a broader family of machine learning methods based on artificial neural networks with representation learning."]
+  },
+  {
+    "question": "What is prompt engineering?",
+    "ground_truth_answer": "Prompt engineering is designing and refining input prompts for language models to improve outputs without retraining.",
+    "ground_truth_contexts": ["Prompt engineering is the practice of designing and refining the input prompts given to language models to elicit desired outputs."]
+  }
+]

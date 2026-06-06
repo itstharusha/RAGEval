@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAGEval — RAG Evaluation Framework</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=SF+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0F0F11;
+            --bg-secondary: #1C1C1E;
+            --bg-tertiary: #2C2C2E;
+            --accent: #007AFF;
+            --accent-hover: #2997FF;
+            --text-primary: #F5F5F7;
+            --text-secondary: #A1A1A6;
+            --text-tertiary: #6E6E73;
+            --border: #38383A;
+            --success: #30D158;
+            --warning: #FF9F0A;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            overflow: hidden;
+            height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .header {
+            background-color: var(--bg-secondary);
+            border-bottom: 0.5px solid var(--border);
+            padding: 14px 28px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 17px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+        }
+
+        .header-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--success);
+            box-shadow: 0 0 0 2px rgba(48, 209, 88, 0.3);
+            animation: pulse 3s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .main-wrapper {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 260px;
+            background-color: var(--bg-secondary);
+            border-right: 0.5px solid var(--border);
+            overflow-y: auto;
+            padding: 24px 16px;
+            user-select: none;
+        }
+
+        .nav-section {
+            margin-bottom: 32px;
+        }
+
+        .nav-section h3 {
+            color: var(--text-tertiary);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding: 0 12px;
+        }
+
+        .nav-tabs {
+            list-style: none;
+        }
+
+        .nav-tabs li {
+            margin-bottom: 4px;
+        }
+
+        .nav-tabs button {
+            width: 100%;
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: left;
+            border-radius: 8px;
+            transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .nav-tabs button:hover {
+            background-color: var(--bg-tertiary);
+        }
+
+        .nav-tabs button.active {
+            background-color: rgba(0, 122, 255, 0.15);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .quick-stats {
+            margin-top: 28px;
+            padding: 20px;
+            background-color: var(--bg-tertiary);
+            border-radius: 12px;
+            border: 0.5px solid var(--border);
+        }
+
+        .quick-stats h4 {
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+
+        .stat-label { 
+            color: var(--text-tertiary); 
+        }
+        
+        .stat-value { 
+            color: var(--text-primary); 
+            font-weight: 600; 
+        }
+
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+            background-color: var(--bg-primary);
+        }
+
+        .tab-view {
+            display: none;
+        }
+
+        .tab-view.active {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 22px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--text-primary);
+            margin-bottom: 24px;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .metric-card {
+            background-color: var(--bg-secondary);
+            border: 0.5px solid var(--border);
+            border-radius: 14px;
+            padding: 24px;
+            transition: transform 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .metric-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+        }
+
+        .gauge-container {
+            width: 132px;
+            height: 132px;
+            margin: 0 auto 16px;
+        }
+
+        .gauge-value {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            text-align: center;
+            color: var(--text-primary);
+        }
+
+        .radar-container {
+            background-color: var(--bg-secondary);
+            border: 0.5px solid var(--border);
+            border-radius: 14px;
+            padding: 24px;
+            max-width: 460px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 11px 14px;
+            background-color: var(--bg-tertiary);
+            border: 0.5px solid var(--border);
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.2);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 160px;
+            font-family: ui-monospace, 'SF Mono', monospace;
+        }
+
+        .button {
+            padding: 12px 24px;
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+
+        .button:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .button.secondary {
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .button.secondary:hover {
+            background-color: #3A3A3C;
+        }
+
+        .button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 14px 20px;
+            background-color: var(--bg-secondary);
+            border: 0.5px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-size: 14px;
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+            animation: toastIn 0.3s ease forwards;
+            z-index: 10000;
+            max-width: 360px;
+        }
+
+        .toast.success { border-left: 4px solid var(--success); }
+        .toast.error { border-left: 4px solid #FF453A; }
+
+        @keyframes toastIn {
+            from { transform: translateY(30px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 0.5px solid var(--border);
+            background-color: var(--bg-secondary);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            padding: 14px 16px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            border-bottom: 0.5px solid var(--border);
+        }
+
+        td {
+            padding: 14px 16px;
+            border-bottom: 0.5px solid var(--border);
+            font-size: 13.5px;
+        }
+
+        tr:hover {
+            background-color: rgba(255,255,255,0.03);
+        }
+
+        .run-meta {
+            background-color: var(--bg-secondary);
+            border: 0.5px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 28px;
+            font-size: 13px;
+        }
+
+        .run-meta-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+        }
+
+        .run-meta-label { 
+            color: var(--text-secondary); 
+        }
+
+        .placeholder {
+            color: var(--text-tertiary);
+            font-size: 14px;
+            padding: 60px 40px;
+            background-color: var(--bg-secondary);
+            border: 1px dashed var(--border);
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .json-example {
+            background-color: var(--bg-tertiary);
+            border: 0.5px solid var(--border);
+            border-radius: 10px;
+            padding: 20px;
+            font-size: 13px;
+            font-family: ui-monospace, 'SF Mono', monospace;
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+            overflow-x: auto;
+            line-height: 1.4;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 20px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .expand-btn {
+            background: none;
+            border: none;
+            color: var(--accent);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>RAGEval</h1>
+            <div class="header-status">
+                <div class="status-indicator"></div>
+                <span id="status-text">Ready</span>
+            </div>
+        </div>
+
+        <div class="main-wrapper">
+            <div class="sidebar">
+                <div class="nav-section">
+                    <h3>Core</h3>
+                    <ul class="nav-tabs">
+                        <li><button class="nav-btn active" data-tab="dashboard">Dashboard</button></li>
+                        <li><button class="nav-btn" data-tab="evaluator">Run Evaluation</button></li>
+                        <li><button class="nav-btn" data-tab="ingest">Ingest Corpus</button></li>
+                    </ul>
+                </div>
+
+                <div class="nav-section">
+                    <h3>Workspace</h3>
+                    <ul class="nav-tabs">
+                        <li><button class="nav-btn" data-tab="history">History</button></li>
+                        <li><button class="nav-btn" data-tab="explorer">Sample Explorer</button></li>
+                    </ul>
+                </div>
+
+                <div class="quick-stats">
+                    <h4>Latest Run Summary</h4>
+                    <div class="stat-item">
+                        <span class="stat-label">Samples</span>
+                        <span class="stat-value" id="quick-samples">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Faithfulness</span>
+                        <span class="stat-value" id="quick-faith">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Precision</span>
+                        <span class="stat-value" id="quick-prec">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Recall</span>
+                        <span class="stat-value" id="quick-rec">—</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Relevance</span>
+                        <span class="stat-value" id="quick-rel">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="content">
+                <!-- Dashboard Tab -->
+                <div id="dashboard" class="tab-view active">
+                    <h2 class="section-title">Evaluation Dashboard</h2>
+                    
+                    <div id="run-metadata" class="run-meta" style="display: none;">
+                        <div class="run-meta-item">
+                            <span class="run-meta-label">Run ID</span>
+                            <span class="run-meta-value" id="meta-run-id">—</span>
+                        </div>
+                        <div class="run-meta-item">
+                            <span class="run-meta-label">Run Name</span>
+                            <span class="run-meta-value" id="meta-run-name">—</span>
+                        </div>
+                        <div class="run-meta-item">
+                            <span class="run-meta-label">Created</span>
+                            <span class="run-meta-value" id="meta-created">—</span>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Faithfulness</div>
+                            <div class="gauge-container">
+                                <svg id="gauge-faithfulness" width="132" height="132" viewBox="0 0 132 132"></svg>
+                            </div>
+                            <div class="gauge-value" id="val-faithfulness">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Context Precision</div>
+                            <div class="gauge-container">
+                                <svg id="gauge-precision" width="132" height="132" viewBox="0 0 132 132"></svg>
+                            </div>
+                            <div class="gauge-value" id="val-precision">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Context Recall</div>
+                            <div class="gauge-container">
+                                <svg id="gauge-recall" width="132" height="132" viewBox="0 0 132 132"></svg>
+                            </div>
+                            <div class="gauge-value" id="val-recall">—</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Answer Relevance</div>
+                            <div class="gauge-container">
+                                <svg id="gauge-relevance" width="132" height="132" viewBox="0 0 132 132"></svg>
+                            </div>
+                            <div class="gauge-value" id="val-relevance">—</div>
+                        </div>
+                    </div>
+
+                    <div class="radar-container">
+                        <canvas id="radar-chart" height="340"></canvas>
+                    </div>
+
+                    <div id="no-runs" class="placeholder">
+                        No evaluation runs yet. Start a new one in the Run Evaluation tab.
+                    </div>
+                </div>
+
+                <!-- Run Evaluator Tab -->
+                <div id="evaluator" class="tab-view">
+                    <h2 class="section-title">Run Evaluation</h2>
+                    
+                    <div class="json-example">
+<pre>{
+  "run_name": "baseline-v1",
+  "namespace": "default",
+  "dataset": [
+    {
+      "question": "What is the capital of France?",
+      "ground_truth_answer": "Paris",
+      "ground_truth_contexts": ["France is a country in Western Europe. Its capital is Paris."]
+    }
+  ]
+}</pre>
+                    </div>
+
+                    <form id="eval-form">
+                        <div class="form-group">
+                            <label for="eval-dataset">Evaluation Dataset (JSON)</label>
+                            <textarea id="eval-dataset" placeholder="Paste your evaluation dataset JSON here..." required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="eval-namespace">Namespace</label>
+                            <input type="text" id="eval-namespace" value="default" />
+                        </div>
+
+                        <div class="form-group">
+                            <label for="eval-runname">Run Name</label>
+                            <input type="text" id="eval-runname" placeholder="e.g. production-v3" />
+                        </div>
+
+                        <button type="submit" class="button" id="eval-btn">Run Evaluation</button>
+                        <div id="eval-progress" style="display: none; margin-top: 20px; font-size: 14px; color: var(--text-secondary);">
+                            <span class="spinner"></span>
+                            Evaluating...
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Ingest Corpus Tab -->
+                <div id="ingest" class="tab-view">
+                    <h2 class="section-title">Ingest Corpus</h2>
+                    
+                    <form id="ingest-form">
+                        <div class="form-group">
+                            <label for="ingest-text">Text Corpus</label>
+                            <textarea id="ingest-text" placeholder="Paste or enter your document corpus..." required></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="ingest-namespace">Namespace</label>
+                            <input type="text" id="ingest-namespace" value="default" />
+                        </div>
+
+                        <button type="submit" class="button" id="ingest-btn">Ingest Corpus</button>
+                        <div id="ingest-progress" style="display: none; margin-top: 20px; font-size: 14px; color: var(--text-secondary);">
+                            <span class="spinner"></span>
+                            Ingesting...
+                        </div>
+                    </form>
+
+                    <div id="ingest-result" class="placeholder" style="display: none; margin-top: 24px;"></div>
+                </div>
+
+                <!-- History Tab -->
+                <div id="history" class="tab-view">
+                    <h2 class="section-title">Evaluation History</h2>
+                    
+                    <div class="table-container">
+                        <table id="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Run ID</th>
+                                    <th>Run Name</th>
+                                    <th>Created</th>
+                                    <th>Faithfulness</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>Relevance</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="no-history" class="placeholder" style="margin-top: 24px;">
+                        No runs yet. Run your first evaluation to begin.
+                    </div>
+                </div>
+
+                <!-- Sample Explorer Tab -->
+                <div id="explorer" class="tab-view">
+                    <h2 class="section-title">Sample Explorer</h2>
+                    
+                    <div id="explorer-selector" style="margin-bottom: 24px; max-width: 420px;">
+                        <div class="form-group">
+                            <label for="explorer-run-select">Select Run</label>
+                            <select id="explorer-run-select" style="height: 44px;">
+                                <option value="">Select a run...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="table-container" id="explorer-table-wrapper" style="display: none;">
+                        <table id="explorer-table">
+                            <thead>
+                                <tr>
+                                    <th>Question</th>
+                                    <th>Faithfulness</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>Relevance</th>
+                                    <th>Latency</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="explorer-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <button class="button" id="export-csv-btn" style="display: none; margin-top: 20px;">Export CSV</button>
+
+                    <div id="no-explorer" class="placeholder" style="margin-top: 24px;">
+                        Select a run above to explore individual sample results.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRun = null;
+        let allRuns = [];
+        let radarChartInstance = null;
+        // Base API URL for backend (adjust if your backend runs on a different host/port)
+        const API_BASE = 'http://localhost:8000/api';
+
+        // Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabName = btn.dataset.tab;
+                switchTab(tabName);
+            });
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        }
+
+        // Color Scoring
+        function scoreColor(score) {
+            if (score === null || score === undefined) return '#6E6E73';
+            if (score >= 0.75) return '#30D158';
+            if (score >= 0.5) return '#FF9F0A';
+            return '#FF453A';
+        }
+
+        // Gauge Rendering (Apple-style)
+        function renderGauge(elementId, score) {
+            const svg = document.getElementById(elementId);
+            if (!svg) return;
+            svg.innerHTML = '';
+            
+            if (score === null || score === undefined) {
+                svg.innerHTML = `<text x="66" y="74" text-anchor="middle" fill="#6E6E73" font-size="13" font-weight="500">N/A</text>`;
+                return;
+            }
+
+            const radius = 52;
+            const cx = 66, cy = 66;
+            const startAngle = -Math.PI * 0.8;
+            const endAngle = startAngle + (Math.PI * 1.6 * score);
+
+            const x1 = cx + radius * Math.cos(startAngle);
+            const y1 = cy + radius * Math.sin(startAngle);
+            const x2 = cx + radius * Math.cos(endAngle);
+            const y2 = cy + radius * Math.sin(endAngle);
+
+            const largeArc = score > 0.5 ? 1 : 0;
+            const pathData = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            
+            const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            bgCircle.setAttribute('cx', cx);
+            bgCircle.setAttribute('cy', cy);
+            bgCircle.setAttribute('r', radius);
+            bgCircle.setAttribute('fill', 'none');
+            bgCircle.setAttribute('stroke', '#2C2C2E');
+            bgCircle.setAttribute('stroke-width', '9');
+            g.appendChild(bgCircle);
+
+            const arc = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            arc.setAttribute('d', pathData);
+            arc.setAttribute('fill', scoreColor(score));
+            g.appendChild(arc);
+
+            svg.appendChild(g);
+        }
+
+        // Radar Chart
+        function renderRadarChart(scores) {
+            const ctx = document.getElementById('radar-chart').getContext('2d');
+            
+            if (radarChartInstance) radarChartInstance.destroy();
+
+            const labels = ['Faithfulness', 'Precision', 'Recall', 'Relevance'];
+            const data = [
+                scores.faithfulness !== null ? scores.faithfulness : 0,
+                scores.context_precision !== null ? scores.context_precision : 0,
+                scores.context_recall !== null ? scores.context_recall : 0,
+                scores.answer_relevance !== null ? scores.answer_relevance : 0
+            ];
+
+            radarChartInstance = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Score',
+                        data: data,
+                        borderColor: '#007AFF',
+                        backgroundColor: 'rgba(0, 122, 255, 0.12)',
+                        borderWidth: 2.5,
+                        pointBackgroundColor: '#FFFFFF',
+                        pointBorderColor: '#007AFF',
+                        pointBorderWidth: 2,
+                        pointRadius: 4.5,
+                        pointHoverRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 1,
+                            ticks: { 
+                                color: '#6E6E73', 
+                                font: { size: 11 },
+                                stepSize: 0.2
+                            },
+                            grid: { color: '#38383A' },
+                            angleLines: { color: '#38383A' },
+                            pointLabels: {
+                                color: '#A1A1A6',
+                                font: { size: 13, weight: 500 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // API functions (unchanged)
+        async function fetchLatestRun() {
+            try {
+                const res = await fetch(`${API_BASE}/results`);
+                if (!res.ok) throw new Error(res.statusText);
+                const runs = await res.json();
+                allRuns = runs || [];
+                
+                if (allRuns.length > 0) {
+                    const latest = allRuns[0];
+                    await loadRun(latest.run_id);
+                } else {
+                    document.getElementById('no-runs').style.display = 'block';
+                    document.getElementById('run-metadata').style.display = 'none';
+                }
+            } catch (e) {
+                showToast(`Failed to fetch runs: ${e.message}`, 'error');
+            }
+        }
+
+        async function loadRun(runId) {
+            try {
+                const res = await fetch(`${API_BASE}/results/${runId}`);
+                if (!res.ok) throw new Error(res.statusText);
+                currentRun = await res.json();
+                
+                document.getElementById('no-runs').style.display = 'none';
+                document.getElementById('run-metadata').style.display = 'block';
+                document.getElementById('meta-run-id').textContent = currentRun.run_id;
+                document.getElementById('meta-run-name').textContent = currentRun.run_name || '—';
+                document.getElementById('meta-created').textContent = new Date(currentRun.created_at).toLocaleString();
+
+                const agg = currentRun.aggregate;
+                renderGauge('gauge-faithfulness', agg.faithfulness);
+                renderGauge('gauge-precision', agg.context_precision);
+                renderGauge('gauge-recall', agg.context_recall);
+                renderGauge('gauge-relevance', agg.answer_relevance);
+
+                document.getElementById('val-faithfulness').textContent = agg.faithfulness !== null ? agg.faithfulness.toFixed(3) : '—';
+                document.getElementById('val-precision').textContent = agg.context_precision !== null ? agg.context_precision.toFixed(3) : '—';
+                document.getElementById('val-recall').textContent = agg.context_recall !== null ? agg.context_recall.toFixed(3) : '—';
+                document.getElementById('val-relevance').textContent = agg.answer_relevance !== null ? agg.answer_relevance.toFixed(3) : '—';
+
+                document.getElementById('quick-samples').textContent = agg.num_samples || '—';
+                document.getElementById('quick-faith').textContent = agg.faithfulness !== null ? agg.faithfulness.toFixed(2) : '—';
+                document.getElementById('quick-prec').textContent = agg.context_precision !== null ? agg.context_precision.toFixed(2) : '—';
+                document.getElementById('quick-rec').textContent = agg.context_recall !== null ? agg.context_recall.toFixed(2) : '—';
+                document.getElementById('quick-rel').textContent = agg.answer_relevance !== null ? agg.answer_relevance.toFixed(2) : '—';
+
+                renderRadarChart(agg);
+            } catch (e) {
+                showToast(`Failed to load run: ${e.message}`, 'error');
+            }
+        }
+
+        async function runEvaluation() {
+            try {
+                document.getElementById('eval-btn').disabled = true;
+                document.getElementById('eval-progress').style.display = 'block';
+                document.getElementById('status-text').textContent = 'Evaluating...';
+
+                const datasetText = document.getElementById('eval-dataset').value.trim();
+                let dataset;
+                try {
+                    dataset = JSON.parse(datasetText);
+                } catch {
+                    throw new Error('Invalid JSON format');
+                }
+
+                const body = {
+                    dataset: Array.isArray(dataset) ? dataset : dataset.dataset || [dataset],
+                    namespace: document.getElementById('eval-namespace').value || 'default',
+                    run_name: document.getElementById('eval-runname').value.trim() || null,
+                    metrics: ['faithfulness', 'context_precision', 'context_recall', 'answer_relevance', 'latency']
+                };
+
+                const res = await fetch(`${API_BASE}/evaluate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) throw new Error(res.statusText);
+                await res.json();
+
+                showToast('Evaluation completed successfully', 'success');
+                document.getElementById('eval-dataset').value = '';
+                document.getElementById('eval-runname').value = '';
+
+                await fetchLatestRun();
+                await loadHistory();
+                switchTab('dashboard');
+            } catch (e) {
+                showToast(`Evaluation failed: ${e.message}`, 'error');
+            } finally {
+                document.getElementById('eval-btn').disabled = false;
+                document.getElementById('eval-progress').style.display = 'none';
+                document.getElementById('status-text').textContent = 'Ready';
+            }
+        }
+
+        async function ingestCorpus() {
+            try {
+                document.getElementById('ingest-btn').disabled = true;
+                document.getElementById('ingest-progress').style.display = 'block';
+
+                const text = document.getElementById('ingest-text').value.trim();
+                if (!text) throw new Error('Corpus text is required');
+
+                const body = {
+                    text: text,
+                    namespace: document.getElementById('ingest-namespace').value || 'default',
+                    metadata: {}
+                };
+
+                const res = await fetch(`${API_BASE}/ingest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                if (!res.ok) throw new Error(res.statusText);
+                const result = await res.json();
+
+                document.getElementById('ingest-result').style.display = 'block';
+                document.getElementById('ingest-result').innerHTML = `Successfully ingested <strong>${result.chunks_ingested}</strong> chunks into namespace <strong>${result.namespace}</strong>`;
+                document.getElementById('ingest-text').value = '';
+
+                showToast('Corpus ingested successfully', 'success');
+            } catch (e) {
+                showToast(`Ingestion failed: ${e.message}`, 'error');
+            } finally {
+                document.getElementById('ingest-btn').disabled = false;
+                document.getElementById('ingest-progress').style.display = 'none';
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const res = await fetch(`${API_BASE}/results`);
+                if (!res.ok) throw new Error(res.statusText);
+                const runs = await res.json();
+                allRuns = runs || [];
+
+                const tbody = document.getElementById('history-tbody');
+                tbody.innerHTML = '';
+
+                if (allRuns.length === 0) {
+                    document.getElementById('no-history').style.display = 'block';
+                    return;
+                }
+
+                document.getElementById('no-history').style.display = 'none';
+
+                allRuns.forEach(run => {
+                    const row = document.createElement('tr');
+                    row.style.cursor = 'pointer';
+                    row.onclick = () => {
+                        loadRun(run.run_id);
+                        switchTab('dashboard');
+                    };
+
+                    const agg = run.aggregate;
+                    row.innerHTML = `
+                        <td style="font-family: ui-monospace;">${run.run_id}</td>
+                        <td>${run.run_name || '—'}</td>
+                        <td>${new Date(run.created_at).toLocaleString()}</td>
+                        <td><span style="color: ${scoreColor(agg.faithfulness)}">${agg.faithfulness !== null ? agg.faithfulness.toFixed(3) : '—'}</span></td>
+                        <td><span style="color: ${scoreColor(agg.context_precision)}">${agg.context_precision !== null ? agg.context_precision.toFixed(3) : '—'}</span></td>
+                        <td><span style="color: ${scoreColor(agg.context_recall)}">${agg.context_recall !== null ? agg.context_recall.toFixed(3) : '—'}</span></td>
+                        <td><span style="color: ${scoreColor(agg.answer_relevance)}">${agg.answer_relevance !== null ? agg.answer_relevance.toFixed(3) : '—'}</span></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (e) {
+                showToast(`Failed to load history: ${e.message}`, 'error');
+            }
+        }
+
+        function renderSampleTable(samples) {
+            const tbody = document.getElementById('explorer-tbody');
+            tbody.innerHTML = '';
+
+            samples.forEach((sample, idx) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="max-width: 320px;">${sample.question.substring(0, 65)}${sample.question.length > 65 ? '...' : ''}</td>
+                    <td><span style="color: ${scoreColor(sample.faithfulness)}">${sample.faithfulness !== null ? sample.faithfulness.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(sample.context_precision)}">${sample.context_precision !== null ? sample.context_precision.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(sample.context_recall)}">${sample.context_recall !== null ? sample.context_recall.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(sample.answer_relevance)}">${sample.answer_relevance !== null ? sample.answer_relevance.toFixed(3) : '—'}</span></td>
+                    <td>${sample.latency_ms ? sample.latency_ms.toFixed(0) + ' ms' : '—'}</td>
+                    <td><button class="expand-btn" onclick="toggleDetails(${idx})">View Details</button></td>
+                `;
+                tbody.appendChild(row);
+
+                const detailsRow = document.createElement('tr');
+                detailsRow.id = `details-${idx}`;
+                detailsRow.style.display = 'none';
+                detailsRow.innerHTML = `
+                    <td colspan="7" style="padding: 0;">
+                        <div style="background: var(--bg-tertiary); padding: 20px; margin: 4px 16px; border-radius: 10px; border: 0.5px solid var(--border);">
+                            <div style="margin-bottom: 16px;">
+                                <div style="color: var(--text-secondary); font-size: 12px; font-weight: 600; margin-bottom: 4px;">QUESTION</div>
+                                <div style="color: var(--text-primary); line-height: 1.5;">${sample.question}</div>
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <div style="color: var(--text-secondary); font-size: 12px; font-weight: 600; margin-bottom: 4px;">GENERATED ANSWER</div>
+                                <div style="color: var(--text-primary); line-height: 1.5;">${sample.generated_answer}</div>
+                            </div>
+                            <div style="margin-bottom: 16px;">
+                                <div style="color: var(--text-secondary); font-size: 12px; font-weight: 600; margin-bottom: 4px;">RETRIEVED CONTEXTS</div>
+                                <div style="color: var(--text-primary); line-height: 1.5;">${sample.retrieved_contexts.map((c, i) => `<div style="margin-bottom: 8px; padding-left: 12px; border-left: 2px solid var(--accent);">[${i+1}] ${c}</div>`).join('')}</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--text-secondary); font-size: 12px; font-weight: 600; margin-bottom: 4px;">GROUND TRUTH</div>
+                                <div style="color: var(--text-primary); line-height: 1.5;">${sample.ground_truth_answer}</div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailsRow);
+            });
+        }
+
+        function toggleDetails(idx) {
+            const details = document.getElementById(`details-${idx}`);
+            details.style.display = details.style.display === 'none' ? 'table-row' : 'none';
+        }
+
+        async function exportCSV(runId) {
+            try {
+                const res = await fetch(`${API_BASE}/results/${runId}/export/csv`);
+                if (!res.ok) throw new Error(res.statusText);
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `rageval_${runId}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+                showToast('CSV exported successfully', 'success');
+            } catch (e) {
+                showToast(`Export failed: ${e.message}`, 'error');
+            }
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.transition = 'all 0.3s ease';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(15px)';
+                setTimeout(() => toast.remove(), 300);
+            }, 3200);
+        }
+
+        // Form handlers
+        document.getElementById('eval-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            runEvaluation();
+        });
+
+        document.getElementById('ingest-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            ingestCorpus();
+        });
+
+        document.getElementById('explorer-run-select').addEventListener('change', (e) => {
+            const runId = e.target.value;
+            if (!runId) {
+                document.getElementById('explorer-table-wrapper').style.display = 'none';
+                document.getElementById('export-csv-btn').style.display = 'none';
+                document.getElementById('no-explorer').style.display = 'block';
+                return;
+            }
+            
+            loadRun(runId).then(() => {
+                if (currentRun && currentRun.samples) {
+                    renderSampleTable(currentRun.samples);
+                    document.getElementById('explorer-table-wrapper').style.display = 'block';
+                    document.getElementById('export-csv-btn').style.display = 'inline-block';
+                    document.getElementById('no-explorer').style.display = 'none';
+                    document.getElementById('export-csv-btn').onclick = () => exportCSV(runId);
+                }
+            });
+        });
+
+        // Initialization
+        async function init() {
+            await fetchLatestRun();
+            await loadHistory();
+
+            const selector = document.getElementById('explorer-run-select');
+            allRuns.forEach(run => {
+                const opt = document.createElement('option');
+                opt.value = run.run_id;
+                opt.textContent = `${run.run_id.substring(0, 8)}... — ${run.run_name || 'Untitled'}`;
+                selector.appendChild(opt);
+            });
+        }
+
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

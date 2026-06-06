@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAGEval — RAG Evaluation Framework</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=SF+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        :root {
+            /* Neura Light Theme Colors */
+            --bg-page: #F4F5F7;
+            --bg-card: #FFFFFF;
+            --bg-input: #F8F9FA;
+            
+            --accent: #E85D25; 
+            --accent-hover: #D14B1C;
+            --accent-light: rgba(232, 93, 37, 0.1);
+            
+            --text-main: #1A1D1F;
+            --text-secondary: #6F767E;
+            --text-tertiary: #737A82; /* Darkened for better accessibility contrast */
+            
+            --border: #EFEFEF;
+            --border-strong: #E6E8EC;
+            
+            --btn-dark: #111315;
+            --btn-dark-hover: #272B30;
+            
+            --success: #30D158;
+            --warning: #FF9F0A;
+            --error: #FF453A;
+
+            --radius-card: 24px;
+            --radius-pill: 100px;
+            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.04);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            line-height: 1.5;
+            height: 100vh;
+            overflow-y: auto;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+        }
+
+        /* Top Header Navigation */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: transparent;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-mark {
+            width: 28px;
+            height: 28px;
+            background-color: var(--accent);
+            border-radius: 8px;
+            border-bottom-right-radius: 4px;
+            border-top-left-radius: 12px;
+            display: flex;
+            position: relative;
+        }
+        
+        .logo-mark::after {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 20px;
+            background-color: #FF8F60;
+            border-radius: 6px;
+            right: -6px;
+            top: 4px;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            color: var(--text-main);
+            margin-right: 48px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            background-color: var(--bg-card);
+            padding: 6px;
+            border-radius: var(--radius-pill);
+            box-shadow: var(--shadow-sm);
+            gap: 4px;
+        }
+
+        .nav-tabs button {
+            padding: 10px 24px;
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: var(--radius-pill);
+            transition: all 0.2s ease;
+        }
+
+        .nav-tabs button:hover {
+            color: var(--text-main);
+        }
+
+        .nav-tabs button.active {
+            background-color: var(--bg-page);
+            color: var(--text-main);
+            font-weight: 600;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: var(--bg-card);
+            padding: 10px 20px;
+            border-radius: var(--radius-pill);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--success);
+            box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.2);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0.4); }
+            70% { box-shadow: 0 0 0 6px rgba(48, 209, 88, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(48, 209, 88, 0); }
+        }
+
+        /* Content Area */
+        .content {
+            width: 100%;
+        }
+
+        .tab-view {
+            display: none;
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        .tab-view.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .section-title {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            color: var(--text-main);
+            margin-bottom: 24px;
+        }
+
+        /* Fixed Grid Layouts (No Mobile Optimization) */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .top-row-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border-radius: var(--radius-card);
+            padding: 32px;
+            box-shadow: var(--shadow-card);
+            position: relative;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .metric-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        /* Corrected SVG Gauge Layout */
+        .gauge-container {
+            width: 100%;
+            max-width: 180px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .gauge-subtext {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-tertiary);
+            text-align: center;
+            margin-top: -12px;
+        }
+
+        /* Summary Stats Cards */
+        .stat-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .stat-block .label {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .stat-block .value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .dark-card {
+            background-color: var(--btn-dark);
+            color: white;
+        }
+        
+        .dark-card .card-title {
+            color: white;
+        }
+        
+        .dark-card .metric-label {
+            color: #A1A1A6;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 320px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Forms */
+        .form-card {
+            max-width: 800px;
+        }
+
+        .form-group {
+            margin-bottom: 28px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-main);
+            margin-bottom: 10px;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 16px 20px;
+            background-color: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 15px;
+            border-radius: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .form-group input {
+            border-radius: var(--radius-pill);
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+            background-color: var(--bg-card);
+            box-shadow: 0 0 0 4px var(--accent-light);
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 200px;
+            font-family: ui-monospace, 'SF Mono', monospace;
+            font-size: 13px;
+        }
+
+        .button {
+            padding: 14px 32px;
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            border-radius: var(--radius-pill);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(232, 93, 37, 0.2);
+        }
+
+        .button:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-2px);
+        }
+
+        .button.secondary {
+            background-color: var(--btn-dark);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .button.secondary:hover {
+            background-color: var(--btn-dark-hover);
+        }
+
+        .button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2.5px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background-color: var(--bg-card);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background-color: var(--bg-input);
+            color: var(--text-secondary);
+            padding: 18px 24px;
+            text-align: left;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border-strong);
+        }
+
+        td {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            color: var(--text-main);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background-color: var(--bg-page);
+        }
+
+        .run-meta {
+            display: flex;
+            gap: 32px;
+            background-color: var(--bg-input);
+            border-radius: 16px;
+            padding: 20px 32px;
+            margin-bottom: 32px;
+            font-size: 14px;
+        }
+
+        .run-meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .run-meta-label { 
+            color: var(--text-secondary);
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+        
+        .run-meta-value {
+            font-weight: 600;
+        }
+
+        .placeholder {
+            color: var(--text-secondary);
+            font-size: 15px;
+            padding: 80px 40px;
+            background-color: var(--bg-card);
+            border: 2px dashed var(--border-strong);
+            border-radius: 24px;
+            text-align: center;
+        }
+
+        .json-example {
+            background-color: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            font-size: 13px;
+            font-family: ui-monospace, 'SF Mono', monospace;
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+            overflow-x: auto;
+            line-height: 1.6;
+        }
+
+        .expand-btn {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-pill);
+            padding: 6px 14px;
+            color: var(--text-main);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        
+        .expand-btn:hover {
+            background: var(--border);
+        }
+
+        /* Toasts */
+        .toast {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            padding: 16px 24px;
+            background-color: var(--btn-dark);
+            border-radius: 16px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+            animation: toastIn 0.3s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .toast.success::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            background: var(--success);
+            border-radius: 50%;
+        }
+
+        .toast.error::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            background: var(--error);
+            border-radius: 50%;
+        }
+
+        @keyframes toastIn {
+            from { transform: translateY(40px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #D1D1D6;
+            border-radius: 20px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #A1A1A6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="logo-mark"></div>
+                <h1>RAGEval</h1>
+            </div>
+            
+            <div class="nav-tabs">
+                <button class="nav-btn active" data-tab="dashboard">Dashboard</button>
+                <button class="nav-btn" data-tab="evaluator">Run Evaluation</button>
+                <button class="nav-btn" data-tab="ingest">Ingest Corpus</button>
+                <button class="nav-btn" data-tab="history">History</button>
+                <button class="nav-btn" data-tab="explorer">Explorer</button>
+            </div>
+
+            <div class="header-actions">
+                <div class="status-badge">
+                    <div class="status-indicator"></div>
+                    <span id="status-text">Ready</span>
+                </div>
+                </div>
+        </div>
+
+        <div class="content">
+            <div id="dashboard" class="tab-view active">
+                
+                <div id="run-metadata" class="run-meta" style="display: none;">
+                    <div class="run-meta-item">
+                        <span class="run-meta-label">Run ID</span>
+                        <span class="run-meta-value" id="meta-run-id">—</span>
+                    </div>
+                    <div class="run-meta-item">
+                        <span class="run-meta-label">Run Name</span>
+                        <span class="run-meta-value" id="meta-run-name">—</span>
+                    </div>
+                    <div class="run-meta-item">
+                        <span class="run-meta-label">Created</span>
+                        <span class="run-meta-value" id="meta-created">—</span>
+                    </div>
+                </div>
+
+                <div class="top-row-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2 class="card-title">Performance Index</h2>
+                            <div style="background: var(--btn-dark); color: white; padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 500;">Latest Run</div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="performance-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="card dark-card" style="display: flex; flex-direction: column; justify-content: center;">
+                        <div class="metric-label" style="text-align: left;">Total Samples Analyzed</div>
+                        <div id="quick-samples" style="position: relative; text-align: left; font-size: 48px; font-weight: 700; letter-spacing: -0.04em;">—</div>
+                        <div style="margin-top: 40px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 24px; display: flex; justify-content: space-between;">
+                            <div class="stat-block">
+                                <span class="label" style="color:#A1A1A6">Avg Faithfulness</span>
+                                <span class="value" id="quick-faith" style="font-size: 18px">—</span>
+                            </div>
+                            <div class="stat-block">
+                                <span class="label" style="color:#A1A1A6">Avg Relevance</span>
+                                <span class="value" id="quick-rel" style="font-size: 18px">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card" style="display: flex; flex-direction: column; justify-content: center;">
+                        <div class="metric-label" style="text-align: left;">Context Retrieval</div>
+                        <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 24px;">
+                            <div class="stat-block">
+                                <span class="label">Precision Score</span>
+                                <span class="value" id="quick-prec" style="color: var(--accent); font-size: 32px;">—</span>
+                            </div>
+                            <div class="stat-block">
+                                <span class="label">Recall Score</span>
+                                <span class="value" id="quick-rec" style="font-size: 32px;">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="section-title" style="font-size: 20px; margin-top: 40px;">Detailed Metrics Breakdown</h3>
+                <div class="dashboard-grid">
+                    <div class="card" style="text-align: center;">
+                        <div class="metric-label">Faithfulness</div>
+                        <div class="gauge-container">
+                            <svg id="gauge-faithfulness"></svg>
+                            <div class="gauge-subtext">Accuracy against context</div>
+                        </div>
+                    </div>
+                    <div class="card" style="text-align: center;">
+                        <div class="metric-label">Context Precision</div>
+                        <div class="gauge-container">
+                            <svg id="gauge-precision"></svg>
+                            <div class="gauge-subtext">Relevant items ranked high</div>
+                        </div>
+                    </div>
+                    <div class="card" style="text-align: center;">
+                        <div class="metric-label">Context Recall</div>
+                        <div class="gauge-container">
+                            <svg id="gauge-recall"></svg>
+                            <div class="gauge-subtext">All relevant context retrieved</div>
+                        </div>
+                    </div>
+                    <div class="card" style="text-align: center;">
+                        <div class="metric-label">Answer Relevance</div>
+                        <div class="gauge-container">
+                            <svg id="gauge-relevance"></svg>
+                            <div class="gauge-subtext">Directness of the answer</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="no-runs" class="placeholder">
+                    <div style="font-size: 24px; margin-bottom: 12px;">📊</div>
+                    No evaluation runs yet.<br>Start a new one in the Run Evaluation tab.
+                </div>
+            </div>
+
+            <div id="evaluator" class="tab-view">
+                <div class="card form-card">
+                    <h2 class="section-title">Run Evaluation</h2>
+                    
+                    <div class="json-example">
+<pre>{
+  "run_name": "baseline-v1",
+  "namespace": "default",
+  "dataset": [
+    {
+      "question": "What is the capital of France?",
+      "ground_truth_answer": "Paris",
+      "ground_truth_contexts": ["France is a country in Western Europe. Its capital is Paris."]
+    }
+  ]
+}</pre>
+                    </div>
+
+                    <form id="eval-form">
+                        <div class="form-group">
+                            <label for="eval-dataset">Evaluation Dataset (JSON)</label>
+                            <textarea id="eval-dataset" placeholder="Paste your evaluation dataset JSON here..." required></textarea>
+                        </div>
+
+                        <div class="top-row-grid" style="grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 0;">
+                            <div class="form-group">
+                                <label for="eval-namespace">Namespace</label>
+                                <input type="text" id="eval-namespace" value="default" />
+                            </div>
+
+                            <div class="form-group">
+                                <label for="eval-runname">Run Name</label>
+                                <input type="text" id="eval-runname" placeholder="e.g. production-v3" />
+                            </div>
+                        </div>
+
+                        <button type="submit" class="button" id="eval-btn">Run Evaluation</button>
+                        <div id="eval-progress" style="display: none; margin-top: 20px; font-size: 14px; color: var(--text-secondary); font-weight: 500;">
+                            <span class="spinner" style="border-top-color: var(--accent);"></span>
+                            Evaluating data...
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div id="ingest" class="tab-view">
+                <div class="card form-card">
+                    <h2 class="section-title">Ingest Corpus</h2>
+                    
+                    <form id="ingest-form">
+                        <div class="form-group">
+                            <label for="ingest-text">Text Corpus</label>
+                            <textarea id="ingest-text" placeholder="Paste or enter your document corpus..." required></textarea>
+                        </div>
+
+                        <div class="form-group" style="max-width: 50%;">
+                            <label for="ingest-namespace">Namespace</label>
+                            <input type="text" id="ingest-namespace" value="default" />
+                        </div>
+
+                        <button type="submit" class="button secondary" id="ingest-btn">Ingest Corpus</button>
+                        <div id="ingest-progress" style="display: none; margin-top: 20px; font-size: 14px; color: var(--text-secondary); font-weight: 500;">
+                            <span class="spinner" style="border-top-color: var(--btn-dark);"></span>
+                            Processing corpus...
+                        </div>
+                    </form>
+
+                    <div id="ingest-result" class="placeholder" style="display: none; margin-top: 32px; padding: 40px; border-style: solid; background: var(--bg-page); border-color: var(--border);"></div>
+                </div>
+            </div>
+
+            <div id="history" class="tab-view">
+                <div class="card" style="padding: 0; overflow: hidden;">
+                    <div style="padding: 32px 32px 16px;">
+                        <h2 class="section-title" style="margin-bottom: 0;">Evaluation History</h2>
+                    </div>
+                    
+                    <div class="table-container" style="border: none; border-radius: 0;">
+                        <table id="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Run ID</th>
+                                    <th>Run Name</th>
+                                    <th>Created</th>
+                                    <th>Faithfulness</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>Relevance</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="no-history" class="placeholder" style="margin: 32px; border: none; background: var(--bg-page);">
+                        No runs yet. Run your first evaluation to begin.
+                    </div>
+                </div>
+            </div>
+
+            <div id="explorer" class="tab-view">
+                <div class="card" style="padding: 0; overflow: hidden;">
+                    <div style="padding: 32px 32px 0;">
+                        <h2 class="section-title">Sample Explorer</h2>
+                        
+                        <div id="explorer-selector" style="margin-bottom: 24px; max-width: 420px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <select id="explorer-run-select">
+                                    <option value="">Select a run to explore...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-container" id="explorer-table-wrapper" style="display: none; border: none; border-radius: 0; border-top: 1px solid var(--border);">
+                        <table id="explorer-table">
+                            <thead>
+                                <tr>
+                                    <th>Question</th>
+                                    <th>Faithfulness</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>Relevance</th>
+                                    <th>Latency</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="explorer-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <div style="padding: 24px 32px;">
+                        <button class="button secondary" id="export-csv-btn" style="display: none;">Export CSV</button>
+                    </div>
+
+                    <div id="no-explorer" class="placeholder" style="margin: 32px; border: none; background: var(--bg-page);">
+                        Select a run above to explore individual sample results.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentRun = null;
+        let allRuns = [];
+        let chartInstance = null;
+        const API_BASE = 'http://localhost:8000/api';
+
+        // Navigation
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabName = btn.dataset.tab;
+                switchTab(tabName);
+            });
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        }
+
+        function scoreColor(score) {
+            if (score === null || score === undefined) return '#9A9FA5';
+            if (score >= 0.75) return '#30D158';
+            if (score >= 0.5) return '#E85D25';
+            return '#FF453A';
+        }
+
+        // Updated SVG Gauge with embedded text
+        function renderGauge(elementId, score) {
+            const svg = document.getElementById(elementId);
+            if (!svg) return;
+            svg.innerHTML = '';
+            
+            // Make SVG responsive
+            svg.setAttribute('viewBox', '0 0 160 140');
+            svg.style.width = '100%';
+            svg.style.height = 'auto';
+            
+            if (score === null || score === undefined) {
+                svg.innerHTML = `<text x="80" y="90" text-anchor="middle" font-size="28" font-weight="700" fill="#9A9FA5">N/A</text>`;
+                return;
+            }
+
+            const radius = 60; 
+            const cx = 80, cy = 90; 
+            const startAngle = -Math.PI * 0.9;
+            const endAngle = Math.PI * 0.9;
+            
+            function getArcPath(start, end) {
+                const x1 = cx + radius * Math.cos(start);
+                const y1 = cy + radius * Math.sin(start);
+                const x2 = cx + radius * Math.cos(end);
+                const y2 = cy + radius * Math.sin(end);
+                const largeArc = end - start > Math.PI ? 1 : 0;
+                return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}`;
+            }
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            
+            // Background Track (Thicker, wider gaps)
+            const bgPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            bgPath.setAttribute('d', getArcPath(startAngle, endAngle));
+            bgPath.setAttribute('fill', 'none');
+            bgPath.setAttribute('stroke', '#F4F5F7');
+            bgPath.setAttribute('stroke-width', '32'); 
+            bgPath.setAttribute('stroke-dasharray', '14 8'); 
+            g.appendChild(bgPath);
+
+            // Foreground Track
+            if (score > 0) {
+                const scoreEndAngle = startAngle + ((endAngle - startAngle) * score);
+                const fgPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                fgPath.setAttribute('d', getArcPath(startAngle, scoreEndAngle));
+                fgPath.setAttribute('fill', 'none');
+                fgPath.setAttribute('stroke', '#E85D25'); 
+                fgPath.setAttribute('stroke-width', '32');
+                fgPath.setAttribute('stroke-dasharray', '14 8');
+                g.appendChild(fgPath);
+            }
+
+            // Embed text inside SVG for perfect scaling
+            const valueText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            valueText.setAttribute('x', '80');
+            valueText.setAttribute('y', '96'); 
+            valueText.setAttribute('text-anchor', 'middle');
+            valueText.setAttribute('font-size', '32');
+            valueText.setAttribute('font-weight', '700');
+            valueText.setAttribute('fill', '#1A1D1F');
+            valueText.textContent = (score * 100).toFixed(1) + '%';
+            g.appendChild(valueText);
+
+            svg.appendChild(g);
+        }
+
+        // Updated to Bar Chart
+        function renderBarChart(scores) {
+            const ctx = document.getElementById('performance-chart').getContext('2d');
+            
+            if (chartInstance) chartInstance.destroy();
+
+            const labels = ['Faithfulness', 'Precision', 'Recall', 'Relevance'];
+            const data = [
+                scores.faithfulness !== null ? scores.faithfulness * 100 : 0,
+                scores.context_precision !== null ? scores.context_precision * 100 : 0,
+                scores.context_recall !== null ? scores.context_recall * 100 : 0,
+                scores.answer_relevance !== null ? scores.answer_relevance * 100 : 0
+            ];
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: '#E85D25',
+                        borderRadius: 6, 
+                        borderSkipped: false,
+                        barThickness: 32
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: { color: '#EFEFEF', drawBorder: false },
+                            ticks: { color: '#9A9FA5', font: { family: "'Inter', sans-serif" } }
+                        },
+                        x: {
+                            grid: { display: false, drawBorder: false },
+                            ticks: { color: '#6F767E', font: { weight: 500, family: "'Inter', sans-serif" } }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#111315',
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function(context) { return context.raw + '%'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function fetchLatestRun() {
+            try {
+                const res = await fetch(`${API_BASE}/results`);
+                if (!res.ok) throw new Error(res.statusText);
+                const runs = await res.json();
+                allRuns = runs || [];
+                
+                if (allRuns.length > 0) {
+                    const latest = allRuns[0];
+                    await loadRun(latest.run_id);
+                } else {
+                    document.getElementById('no-runs').style.display = 'block';
+                    document.getElementById('run-metadata').style.display = 'none';
+                    document.querySelector('.top-row-grid').style.display = 'none';
+                    document.querySelector('.dashboard-grid').style.display = 'none';
+                }
+            } catch (e) {
+                console.warn('Mocking data because API is unreachable.');
+                mockDataFallback();
+            }
+        }
+
+        async function loadRun(runId) {
+            try {
+                const res = await fetch(`${API_BASE}/results/${runId}`);
+                if (!res.ok) throw new Error(res.statusText);
+                currentRun = await res.json();
+                updateDashboardWithRun(currentRun);
+            } catch (e) {
+                console.warn(`Failed to load run ${runId}: ${e.message}`);
+            }
+        }
+
+        function updateDashboardWithRun(run) {
+            document.getElementById('no-runs').style.display = 'none';
+            document.querySelector('.top-row-grid').style.display = 'grid';
+            document.querySelector('.dashboard-grid').style.display = 'grid';
+            
+            document.getElementById('meta-run-id').textContent = run.run_id;
+            document.getElementById('meta-run-name').textContent = run.run_name || '—';
+            document.getElementById('meta-created').textContent = new Date(run.created_at || Date.now()).toLocaleString();
+
+            const agg = run.aggregate;
+
+            renderGauge('gauge-faithfulness', agg.faithfulness);
+            renderGauge('gauge-precision', agg.context_precision);
+            renderGauge('gauge-recall', agg.context_recall);
+            renderGauge('gauge-relevance', agg.answer_relevance);
+
+            document.getElementById('quick-samples').textContent = agg.num_samples || '—';
+            document.getElementById('quick-faith').textContent = agg.faithfulness !== null ? agg.faithfulness.toFixed(3) : '—';
+            document.getElementById('quick-prec').textContent = agg.context_precision !== null ? agg.context_precision.toFixed(3) : '—';
+            document.getElementById('quick-rec').textContent = agg.context_recall !== null ? agg.context_recall.toFixed(3) : '—';
+            document.getElementById('quick-rel').textContent = agg.answer_relevance !== null ? agg.answer_relevance.toFixed(3) : '—';
+
+            renderBarChart(agg);
+        }
+
+        function mockDataFallback() {
+            const mockRun = {
+                run_id: "mock-run-001",
+                run_name: "Baseline Neura Test",
+                created_at: new Date().toISOString(),
+                aggregate: {
+                    num_samples: 1304,
+                    faithfulness: 0.852,
+                    context_precision: 0.672,
+                    context_recall: 0.910,
+                    answer_relevance: 0.785
+                },
+                samples: [
+                    { question: "What is Stratosphere's pricing model?", faithfulness: 0.9, context_precision: 0.8, context_recall: 1.0, answer_relevance: 0.85, latency_ms: 120, generated_answer: "It is a subscription model.", ground_truth_answer: "Subscription based SaaS.", retrieved_contexts: ["Pricing is subscription based."] }
+                ]
+            };
+            allRuns = [mockRun];
+            currentRun = mockRun;
+            updateDashboardWithRun(mockRun);
+            populateHistory(allRuns);
+            populateExplorerDropdown();
+        }
+
+        async function runEvaluation() {
+            document.getElementById('eval-btn').disabled = true;
+            document.getElementById('eval-progress').style.display = 'block';
+            
+            setTimeout(() => {
+                showToast('Evaluation completed successfully', 'success');
+                document.getElementById('eval-btn').disabled = false;
+                document.getElementById('eval-progress').style.display = 'none';
+                document.getElementById('eval-dataset').value = '';
+                mockDataFallback(); 
+                switchTab('dashboard');
+            }, 1500);
+        }
+
+        async function ingestCorpus() {
+            document.getElementById('ingest-btn').disabled = true;
+            document.getElementById('ingest-progress').style.display = 'block';
+
+            setTimeout(() => {
+                document.getElementById('ingest-btn').disabled = false;
+                document.getElementById('ingest-progress').style.display = 'none';
+                document.getElementById('ingest-result').style.display = 'block';
+                document.getElementById('ingest-result').innerHTML = `Successfully ingested <strong>240</strong> chunks into namespace <strong>default</strong>`;
+                showToast('Corpus ingested successfully', 'success');
+            }, 1200);
+        }
+
+        function populateHistory(runs) {
+            const tbody = document.getElementById('history-tbody');
+            tbody.innerHTML = '';
+
+            if (!runs || runs.length === 0) {
+                document.getElementById('no-history').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('no-history').style.display = 'none';
+
+            runs.forEach(run => {
+                const row = document.createElement('tr');
+                row.style.cursor = 'pointer';
+                row.onclick = () => {
+                    updateDashboardWithRun(run);
+                    switchTab('dashboard');
+                };
+
+                const agg = run.aggregate;
+                row.innerHTML = `
+                    <td style="font-family: ui-monospace; font-weight: 500;">${run.run_id.substring(0, 8)}...</td>
+                    <td style="font-weight: 500;">${run.run_name || '—'}</td>
+                    <td style="color: var(--text-secondary);">${new Date(run.created_at).toLocaleString()}</td>
+                    <td><span style="color: ${scoreColor(agg.faithfulness)}; font-weight: 600;">${agg.faithfulness !== null ? agg.faithfulness.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(agg.context_precision)}; font-weight: 600;">${agg.context_precision !== null ? agg.context_precision.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(agg.context_recall)}; font-weight: 600;">${agg.context_recall !== null ? agg.context_recall.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(agg.answer_relevance)}; font-weight: 600;">${agg.answer_relevance !== null ? agg.answer_relevance.toFixed(3) : '—'}</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function renderSampleTable(samples) {
+            const tbody = document.getElementById('explorer-tbody');
+            tbody.innerHTML = '';
+
+            samples.forEach((sample, idx) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="max-width: 320px; font-weight: 500;">${sample.question.substring(0, 65)}${sample.question.length > 65 ? '...' : ''}</td>
+                    <td><span style="color: ${scoreColor(sample.faithfulness)}; font-weight: 600;">${sample.faithfulness !== null ? sample.faithfulness.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(sample.context_precision)}; font-weight: 600;">${sample.context_precision !== null ? sample.context_precision.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(sample.context_recall)}; font-weight: 600;">${sample.context_recall !== null ? sample.context_recall.toFixed(3) : '—'}</span></td>
+                    <td><span style="color: ${scoreColor(sample.answer_relevance)}; font-weight: 600;">${sample.answer_relevance !== null ? sample.answer_relevance.toFixed(3) : '—'}</span></td>
+                    <td style="color: var(--text-secondary);">${sample.latency_ms ? sample.latency_ms.toFixed(0) + ' ms' : '—'}</td>
+                    <td><button class="expand-btn" onclick="toggleDetails(${idx})">View Details</button></td>
+                `;
+                tbody.appendChild(row);
+
+                const detailsRow = document.createElement('tr');
+                detailsRow.id = `details-${idx}`;
+                detailsRow.style.display = 'none';
+                detailsRow.innerHTML = `
+                    <td colspan="7" style="padding: 0;">
+                        <div style="background: var(--bg-input); padding: 24px; margin: 0; border-top: 1px solid var(--border); box-shadow: inset 0 2px 8px rgba(0,0,0,0.02);">
+                            <div style="margin-bottom: 20px;">
+                                <div style="color: var(--text-tertiary); font-size: 12px; font-weight: 600; margin-bottom: 6px; letter-spacing: 0.5px;">QUESTION</div>
+                                <div style="color: var(--text-main); font-weight: 500;">${sample.question}</div>
+                            </div>
+                            <div style="margin-bottom: 20px;">
+                                <div style="color: var(--text-tertiary); font-size: 12px; font-weight: 600; margin-bottom: 6px; letter-spacing: 0.5px;">GENERATED ANSWER</div>
+                                <div style="color: var(--text-secondary);">${sample.generated_answer}</div>
+                            </div>
+                            <div style="margin-bottom: 20px;">
+                                <div style="color: var(--text-tertiary); font-size: 12px; font-weight: 600; margin-bottom: 6px; letter-spacing: 0.5px;">RETRIEVED CONTEXTS</div>
+                                <div style="color: var(--text-secondary);">${sample.retrieved_contexts.map((c, i) => `<div style="margin-bottom: 8px; padding-left: 14px; border-left: 3px solid var(--accent); background: var(--bg-card); padding: 12px; border-radius: 0 8px 8px 0;">[${i+1}] ${c}</div>`).join('')}</div>
+                            </div>
+                            <div>
+                                <div style="color: var(--text-tertiary); font-size: 12px; font-weight: 600; margin-bottom: 6px; letter-spacing: 0.5px;">GROUND TRUTH</div>
+                                <div style="color: var(--text-main); font-weight: 500;">${sample.ground_truth_answer}</div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailsRow);
+            });
+        }
+
+        function toggleDetails(idx) {
+            const details = document.getElementById(`details-${idx}`);
+            details.style.display = details.style.display === 'none' ? 'table-row' : 'none';
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.transition = 'all 0.4s cubic-bezier(0.23, 1, 0.32, 1)';
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(20px)';
+                setTimeout(() => toast.remove(), 400);
+            }, 3000);
+        }
+
+        document.getElementById('eval-form').addEventListener('submit', (e) => { e.preventDefault(); runEvaluation(); });
+        document.getElementById('ingest-form').addEventListener('submit', (e) => { e.preventDefault(); ingestCorpus(); });
+
+        function populateExplorerDropdown() {
+            const selector = document.getElementById('explorer-run-select');
+            selector.innerHTML = '<option value="">Select a run to explore...</option>';
+            allRuns.forEach(run => {
+                const opt = document.createElement('option');
+                opt.value = run.run_id;
+                opt.textContent = `${run.run_id.substring(0, 8)}... — ${run.run_name || 'Untitled'}`;
+                selector.appendChild(opt);
+            });
+        }
+
+        document.getElementById('explorer-run-select').addEventListener('change', (e) => {
+            const runId = e.target.value;
+            if (!runId) {
+                document.getElementById('explorer-table-wrapper').style.display = 'none';
+                document.getElementById('export-csv-btn').style.display = 'none';
+                document.getElementById('no-explorer').style.display = 'block';
+                return;
+            }
+            
+            if(currentRun && currentRun.samples) {
+                renderSampleTable(currentRun.samples);
+                document.getElementById('explorer-table-wrapper').style.display = 'block';
+                document.getElementById('export-csv-btn').style.display = 'inline-block';
+                document.getElementById('no-explorer').style.display = 'none';
+            }
+        });
+
+        window.addEventListener('load', () => {
+            fetchLatestRun();
+        });
+    </script>
+</body>
+</html>

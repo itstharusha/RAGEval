@@ -1,0 +1,1050 @@
+RAG Evaluation Framework
+Complete Build Specification for Autonomous Coding Agent
+Version 1.0  |  Stack: Python + FastAPI + Groq + Pinecone + Vanilla JS
+Author: Tharusha  |  SLIIT  |  2026
+ 
+1. Project Overview
+RAGEval is a standalone evaluation infrastructure tool that benchmarks any Retrieval-Augmented Generation (RAG) pipeline. Unlike chatbot demos, this is a developer tool — it accepts a running RAG system and outputs structured quality metrics, making it directly useful to any team building production LLM applications.
+
+1.1 Problem Statement
+Every company building RAG systems needs to measure them, but no lightweight, open-source, self-hostable evaluation tool exists at the undergraduate portfolio level. Most developers either rely on expensive managed platforms (e.g., LangSmith Pro) or measure nothing. RAGEval fills this gap.
+
+1.2 What It Does
+•	Ingests a document corpus into Pinecone via a REST endpoint
+•	Accepts a test dataset of (question, ground_truth_answer, ground_truth_contexts) triples
+•	Runs the RAG pipeline for each question and collects (answer, retrieved_contexts, latency)
+•	Computes 5 evaluation metrics for each question-answer pair
+•	Aggregates results into a structured JSON report
+•	Displays the report on a real-time web dashboard served by FastAPI
+•	Optionally exports results to CSV
+
+1.3 Core Metrics Implemented
+Metric	What It Measures	Method	Range
+Faithfulness	Is the answer grounded in the retrieved contexts? Hallucination detector.	LLM-as-judge via Groq: decompose answer into claims, verify each claim against contexts	0.0 – 1.0
+Context Precision	Are the retrieved chunks actually relevant to the question?	LLM-as-judge: score each retrieved chunk for relevance, compute mean	0.0 – 1.0
+Context Recall	Did the retriever find all the contexts needed to answer the question?	LLM-as-judge: compare ground truth contexts against retrieved contexts	0.0 – 1.0
+Answer Relevance	Does the generated answer actually address the question asked?	Embedding cosine similarity: embed question and answer, compute similarity	0.0 – 1.0
+Latency	End-to-end response time for retrieval + generation	Measured in milliseconds via Python time.perf_counter()	ms (lower is better)
+
+1.4 Key Design Decisions
+•	Groq (llama-3.3-70b-versatile) used for all LLM-as-judge calls — free tier, fast inference
+•	sentence-transformers/all-MiniLM-L6-v2 used for embeddings — free, runs locally, no API cost
+•	Pinecone serverless free tier used for vector storage
+•	No React build step — dashboard is a single self-contained HTML file served by FastAPI as a static file, keeping setup to one command
+•	All evaluation logic is modular: each metric is a separate function in its own file, easy to extend
+•	Results stored in memory (Python dict) per evaluation run; optionally persisted to results.json in /data/
+ 
+2. Complete File & Directory Structure
+The agent must create every file listed below exactly at the paths specified. Do not rename, reorganize, or merge files.
+
+rag-eval-framework/
+├── .env.example                    # Template for environment variables
+├── .gitignore
+├── README.md                       # Full project README (see Section 10)
+├── requirements.txt                # Python dependencies (already created)
+│
+├── main.py                         # FastAPI app entrypoint
+│
+├── config.py                       # Loads .env, exports CONFIG dict
+│
+├── backend/
+│   ├── __init__.py
+│   ├── ingest.py                   # Document ingestion → Pinecone
+│   ├── retriever.py                # Pinecone query wrapper
+│   ├── generator.py                # Groq LLM answer generation
+│   └── pipeline.py                 # Orchestrates retriever + generator
+│
+├── evaluator/
+│   ├── __init__.py
+│   ├── faithfulness.py             # Faithfulness metric
+│   ├── context_precision.py        # Context precision metric
+│   ├── context_recall.py           # Context recall metric
+│   ├── answer_relevance.py         # Answer relevance metric
+│   ├── latency.py                  # Latency tracking utility
+│   └── runner.py                   # Orchestrates full eval suite
+│
+├── routers/
+│   ├── __init__.py
+│   ├── ingest_router.py            # POST /api/ingest
+│   ├── evaluate_router.py          # POST /api/evaluate
+│   └── results_router.py           # GET  /api/results/{run_id}
+│
+├── models/
+│   ├── __init__.py
+│   ├── requests.py                 # Pydantic request schemas
+│   └── responses.py                # Pydantic response schemas
+│
+├── frontend/
+│   └── index.html                  # Full dashboard (see Section 8)
+│
+├── scripts/
+│   └── run_sample_eval.py          # End-to-end demo script
+│
+└── sample_data/
+    ├── sample_corpus.txt           # 10-paragraph text corpus for demo
+    └── sample_eval_dataset.json    # 5 Q&A pairs for demo
+
+ 
+3. Environment Variables & Configuration
+3.1 .env.example
+The agent must create this file. Users copy it to .env and fill in their keys.
+
+# Groq API — free at console.groq.com
+GROQ_API_KEY=your_groq_api_key_here
+
+# Pinecone — free serverless tier at app.pinecone.io
+PINECONE_API_KEY=your_pinecone_api_key_here
+PINECONE_INDEX_NAME=rageval-index
+PINECONE_CLOUD=aws
+PINECONE_REGION=us-east-1
+
+# Models
+GROQ_MODEL=llama-3.3-70b-versatile
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+
+# RAG settings
+TOP_K_CHUNKS=5
+CHUNK_SIZE=512
+CHUNK_OVERLAP=64
+
+# Server
+HOST=0.0.0.0
+PORT=8000
+
+3.2 config.py — Full Implementation
+This file loads .env using python-dotenv and exports a single CONFIG dict consumed everywhere else. No other file should call os.getenv directly.
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+CONFIG = {
+    "GROQ_API_KEY":        os.getenv("GROQ_API_KEY"),
+    "PINECONE_API_KEY":    os.getenv("PINECONE_API_KEY"),
+    "PINECONE_INDEX_NAME": os.getenv("PINECONE_INDEX_NAME", "rageval-index"),
+    "PINECONE_CLOUD":      os.getenv("PINECONE_CLOUD", "aws"),
+    "PINECONE_REGION":     os.getenv("PINECONE_REGION", "us-east-1"),
+    "GROQ_MODEL":          os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+    "EMBEDDING_MODEL":     os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2"),
+    "TOP_K_CHUNKS":        int(os.getenv("TOP_K_CHUNKS", 5)),
+    "CHUNK_SIZE":          int(os.getenv("CHUNK_SIZE", 512)),
+    "CHUNK_OVERLAP":       int(os.getenv("CHUNK_OVERLAP", 64)),
+    "HOST":                os.getenv("HOST", "0.0.0.0"),
+    "PORT":                int(os.getenv("PORT", 8000)),
+}
+
+def validate_config():
+    required = ["GROQ_API_KEY", "PINECONE_API_KEY"]
+    missing = [k for k in required if not CONFIG.get(k)]
+    if missing:
+        raise ValueError(f"Missing required env vars: {missing}")
+ 
+4. Pydantic Data Models
+4.1 models/requests.py — Full Implementation
+from pydantic import BaseModel, Field
+from typing import List, Optional
+
+class IngestTextRequest(BaseModel):
+    """Request body for ingesting raw text into Pinecone."""
+    text: str = Field(..., description="Raw text corpus to chunk and ingest")
+    namespace: str = Field(default="default", description="Pinecone namespace")
+    metadata: dict = Field(default_factory=dict, description="Optional metadata tags")
+
+class EvalSample(BaseModel):
+    """Single evaluation sample: a question with ground truth."""
+    question: str
+    ground_truth_answer: str
+    ground_truth_contexts: List[str] = Field(
+        default_factory=list,
+        description="List of text chunks that should ideally be retrieved"
+    )
+
+class EvaluateRequest(BaseModel):
+    """Request body for running a full evaluation suite."""
+    dataset: List[EvalSample]
+    namespace: str = Field(default="default")
+    run_name: Optional[str] = Field(default=None, description="Human-readable run label")
+    metrics: List[str] = Field(
+        default=["faithfulness","context_precision","context_recall","answer_relevance","latency"],
+        description="Which metrics to compute"
+    )
+
+4.2 models/responses.py — Full Implementation
+from pydantic import BaseModel
+from typing import List, Dict, Optional
+from datetime import datetime
+
+class SampleResult(BaseModel):
+    """Evaluation result for one question-answer pair."""
+    question: str
+    generated_answer: str
+    retrieved_contexts: List[str]
+    ground_truth_answer: str
+    faithfulness: Optional[float]
+    context_precision: Optional[float]
+    context_recall: Optional[float]
+    answer_relevance: Optional[float]
+    latency_ms: float
+
+class AggregateScores(BaseModel):
+    """Mean scores across all samples in a run."""
+    faithfulness: Optional[float]
+    context_precision: Optional[float]
+    context_recall: Optional[float]
+    answer_relevance: Optional[float]
+    avg_latency_ms: float
+    num_samples: int
+
+class EvalRunResult(BaseModel):
+    """Full evaluation run result returned to the dashboard."""
+    run_id: str
+    run_name: Optional[str]
+    created_at: datetime
+    aggregate: AggregateScores
+    samples: List[SampleResult]
+    status: str   # "completed" | "error"
+    error_message: Optional[str] = None
+
+ 
+5. Backend Implementation
+5.1 backend/ingest.py
+Handles chunking text and upserting vectors into Pinecone. Called by the ingest router.
+
+import uuid
+from typing import List, Dict
+from pinecone import Pinecone, ServerlessSpec
+from sentence_transformers import SentenceTransformer
+from config import CONFIG
+
+_embedder = None
+_pinecone_index = None
+
+def get_embedder() -> SentenceTransformer:
+    """Lazy-load sentence transformer (cached after first call)."""
+    global _embedder
+    if _embedder is None:
+        _embedder = SentenceTransformer(CONFIG["EMBEDDING_MODEL"])
+    return _embedder
+
+def get_pinecone_index():
+    """Lazy-load and return Pinecone index, creating it if it does not exist."""
+    global _pinecone_index
+    if _pinecone_index is None:
+        pc = Pinecone(api_key=CONFIG["PINECONE_API_KEY"])
+        index_name = CONFIG["PINECONE_INDEX_NAME"]
+        existing = [i.name for i in pc.list_indexes()]
+        if index_name not in existing:
+            pc.create_index(
+                name=index_name,
+                dimension=384,   # all-MiniLM-L6-v2 output dim
+                metric="cosine",
+                spec=ServerlessSpec(cloud=CONFIG["PINECONE_CLOUD"],
+                                    region=CONFIG["PINECONE_REGION"])
+            )
+        _pinecone_index = pc.Index(index_name)
+    return _pinecone_index
+
+def chunk_text(text: str, chunk_size: int, overlap: int) -> List[str]:
+    """Split text into overlapping word-boundary chunks."""
+    words = text.split()
+    chunks, start = [], 0
+    while start < len(words):
+        end = min(start + chunk_size, len(words))
+        chunks.append(" ".join(words[start:end]))
+        start += chunk_size - overlap
+    return chunks
+
+def ingest_text(text: str, namespace: str = "default", metadata: dict = None) -> Dict:
+    """Chunk text, embed, and upsert into Pinecone. Returns ingestion stats."""
+    metadata = metadata or {}
+    chunks = chunk_text(text, CONFIG["CHUNK_SIZE"], CONFIG["CHUNK_OVERLAP"])
+    embedder = get_embedder()
+    index = get_pinecone_index()
+    embeddings = embedder.encode(chunks, show_progress_bar=False).tolist()
+    vectors = [
+        {
+            "id": str(uuid.uuid4()),
+            "values": emb,
+            "metadata": {"text": chunk, **metadata}
+        }
+        for chunk, emb in zip(chunks, embeddings)
+    ]
+    # Upsert in batches of 100
+    batch_size = 100
+    for i in range(0, len(vectors), batch_size):
+        index.upsert(vectors=vectors[i:i+batch_size], namespace=namespace)
+    return {"chunks_ingested": len(chunks), "namespace": namespace}
+
+5.2 backend/retriever.py
+Queries Pinecone and returns the top-k text chunks for a given query.
+
+from typing import List
+from backend.ingest import get_embedder, get_pinecone_index
+from config import CONFIG
+
+def retrieve(query: str, namespace: str = "default", top_k: int = None) -> List[str]:
+    """Embed query, search Pinecone, return list of text chunks."""
+    top_k = top_k or CONFIG["TOP_K_CHUNKS"]
+    embedder = get_embedder()
+    index = get_pinecone_index()
+    query_vec = embedder.encode([query])[0].tolist()
+    results = index.query(
+        vector=query_vec,
+        top_k=top_k,
+        namespace=namespace,
+        include_metadata=True
+    )
+    return [match["metadata"]["text"] for match in results["matches"]]
+
+5.3 backend/generator.py
+Calls Groq to generate an answer given a question and a list of context chunks.
+
+from groq import Groq
+from config import CONFIG
+
+_client = None
+
+def get_groq_client() -> Groq:
+    global _client
+    if _client is None:
+        _client = Groq(api_key=CONFIG["GROQ_API_KEY"])
+    return _client
+
+ANSWER_PROMPT = """You are a precise question-answering assistant.
+Answer the question using ONLY the information in the provided context.
+If the context does not contain enough information, say "I don't know based on the provided context."
+Be concise and direct.
+
+Context:
+{context}
+
+Question: {question}
+
+Answer:"""
+
+def generate_answer(question: str, contexts: list[str]) -> str:
+    """Generate an answer from Groq given question + retrieved contexts."""
+    context_text = "\n\n".join(f"[{i+1}] {c}" for i, c in enumerate(contexts))
+    prompt = ANSWER_PROMPT.format(context=context_text, question=question)
+    client = get_groq_client()
+    response = client.chat.completions.create(
+        model=CONFIG["GROQ_MODEL"],
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0,   # deterministic for eval
+        max_tokens=512,
+    )
+    return response.choices[0].message.content.strip()
+
+5.4 backend/pipeline.py
+Combines retriever + generator into a single function that also measures latency. Used by the eval runner.
+
+import time
+from typing import Tuple, List
+from backend.retriever import retrieve
+from backend.generator import generate_answer
+
+def run_rag_pipeline(
+    question: str,
+    namespace: str = "default"
+) -> Tuple[str, List[str], float]:
+    """
+    Run retrieval + generation for one question.
+    Returns: (generated_answer, retrieved_contexts, latency_ms)
+    """
+    start = time.perf_counter()
+    contexts = retrieve(question, namespace=namespace)
+    answer = generate_answer(question, contexts)
+    latency_ms = (time.perf_counter() - start) * 1000
+    return answer, contexts, latency_ms
+ 
+6. Evaluator Module — Full Implementation
+Each metric is a separate Python file. Every metric function returns a float in [0.0, 1.0]. All LLM-as-judge calls go through Groq. The runner.py orchestrates all metrics for a full evaluation run.
+
+6.1 evaluator/faithfulness.py
+Decomposes the generated answer into atomic claims, then asks Groq whether each claim can be directly inferred from the retrieved contexts. Score = (supported claims) / (total claims).
+
+from groq import Groq
+from config import CONFIG
+from backend.generator import get_groq_client
+import json, re
+
+DECOMPOSE_PROMPT = """
+Given the following answer, extract all atomic factual claims as a JSON list of strings.
+Each claim must be a single, self-contained statement.
+Return ONLY a JSON array, no explanation.
+
+Answer: {answer}
+
+JSON array of claims:"""
+
+VERIFY_PROMPT = """
+Given the following context passages, is the claim directly supported by them?
+Answer with ONLY "yes" or "no".
+
+Context:
+{context}
+
+Claim: {claim}
+
+Answer (yes/no):"""
+
+def faithfulness(generated_answer: str, retrieved_contexts: list[str]) -> float:
+    """
+    Faithfulness = fraction of answer claims supported by retrieved contexts.
+    Returns 0.0 if answer is empty or no claims extracted.
+    """
+    if not generated_answer.strip():
+        return 0.0
+    client = get_groq_client()
+    context_text = "\n\n".join(retrieved_contexts)
+    # Step 1: decompose answer into claims
+    decomp_resp = client.chat.completions.create(
+        model=CONFIG["GROQ_MODEL"],
+        messages=[{"role": "user", "content": DECOMPOSE_PROMPT.format(answer=generated_answer)}],
+        temperature=0.0, max_tokens=512
+    )
+    raw = decomp_resp.choices[0].message.content.strip()
+    # Strip markdown fences if present
+    raw = re.sub(r"```json|```", "", raw).strip()
+    try:
+        claims = json.loads(raw)
+    except json.JSONDecodeError:
+        return 0.0
+    if not claims:
+        return 0.0
+    # Step 2: verify each claim against contexts
+    supported = 0
+    for claim in claims:
+        verify_resp = client.chat.completions.create(
+            model=CONFIG["GROQ_MODEL"],
+            messages=[{"role": "user", "content": VERIFY_PROMPT.format(
+                context=context_text, claim=claim
+            )}],
+            temperature=0.0, max_tokens=8
+        )
+        verdict = verify_resp.choices[0].message.content.strip().lower()
+        if verdict.startswith("yes"):
+            supported += 1
+    return round(supported / len(claims), 4)
+
+6.2 evaluator/context_precision.py
+Asks Groq whether each retrieved chunk is actually relevant to the question. Score = (relevant chunks) / (total retrieved chunks).
+
+from backend.generator import get_groq_client
+from config import CONFIG
+
+RELEVANCE_PROMPT = """
+Is the following context passage relevant to answering the question?
+Answer ONLY "yes" or "no".
+
+Question: {question}
+
+Context passage: {context}
+
+Answer (yes/no):"""
+
+def context_precision(question: str, retrieved_contexts: list[str]) -> float:
+    """
+    Context Precision = fraction of retrieved chunks relevant to the question.
+    """
+    if not retrieved_contexts:
+        return 0.0
+    client = get_groq_client()
+    relevant_count = 0
+    for ctx in retrieved_contexts:
+        resp = client.chat.completions.create(
+            model=CONFIG["GROQ_MODEL"],
+            messages=[{"role": "user", "content": RELEVANCE_PROMPT.format(
+                question=question, context=ctx
+            )}],
+            temperature=0.0, max_tokens=8
+        )
+        verdict = resp.choices[0].message.content.strip().lower()
+        if verdict.startswith("yes"):
+            relevant_count += 1
+    return round(relevant_count / len(retrieved_contexts), 4)
+
+6.3 evaluator/context_recall.py
+Compares ground truth contexts against retrieved contexts to check coverage. Asks Groq whether each ground-truth context is semantically covered by the retrieved set.
+
+from backend.generator import get_groq_client
+from config import CONFIG
+
+RECALL_PROMPT = """
+Is the information in the reference passage captured (fully or partially) in the retrieved passages below?
+Answer ONLY "yes" or "no".
+
+Reference passage:
+{reference}
+
+Retrieved passages:
+{retrieved}
+
+Answer (yes/no):"""
+
+def context_recall(
+    ground_truth_contexts: list[str],
+    retrieved_contexts: list[str]
+) -> float:
+    """
+    Context Recall = fraction of ground-truth contexts covered by retrieved contexts.
+    Returns 1.0 if ground_truth_contexts is empty (no reference to miss).
+    """
+    if not ground_truth_contexts:
+        return 1.0
+    if not retrieved_contexts:
+        return 0.0
+    client = get_groq_client()
+    retrieved_text = "\n\n".join(f"[{i+1}] {c}" for i, c in enumerate(retrieved_contexts))
+    covered = 0
+    for ref in ground_truth_contexts:
+        resp = client.chat.completions.create(
+            model=CONFIG["GROQ_MODEL"],
+            messages=[{"role": "user", "content": RECALL_PROMPT.format(
+                reference=ref, retrieved=retrieved_text
+            )}],
+            temperature=0.0, max_tokens=8
+        )
+        verdict = resp.choices[0].message.content.strip().lower()
+        if verdict.startswith("yes"):
+            covered += 1
+    return round(covered / len(ground_truth_contexts), 4)
+
+6.4 evaluator/answer_relevance.py
+Uses cosine similarity between the sentence embeddings of the question and the generated answer to measure topical alignment.
+
+import numpy as np
+from backend.ingest import get_embedder
+
+def cosine_similarity(a: list, b: list) -> float:
+    a, b = np.array(a), np.array(b)
+    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    if denom == 0:
+        return 0.0
+    return float(np.dot(a, b) / denom)
+
+def answer_relevance(question: str, generated_answer: str) -> float:
+    """
+    Answer Relevance = cosine similarity between question and answer embeddings.
+    Measures whether the answer is topically aligned with the question.
+    """
+    if not generated_answer.strip():
+        return 0.0
+    embedder = get_embedder()
+    vecs = embedder.encode([question, generated_answer])
+    return round(cosine_similarity(vecs[0].tolist(), vecs[1].tolist()), 4)
+
+6.5 evaluator/runner.py
+Orchestrates a full evaluation run across all samples. Calls run_rag_pipeline for each sample, then computes all requested metrics. Stores results in a global dict keyed by run_id, which the results router reads.
+
+import uuid
+from datetime import datetime, timezone
+from typing import Dict
+from models.requests import EvaluateRequest, EvalSample
+from models.responses import EvalRunResult, SampleResult, AggregateScores
+from backend.pipeline import run_rag_pipeline
+from evaluator.faithfulness import faithfulness
+from evaluator.context_precision import context_precision
+from evaluator.context_recall import context_recall
+from evaluator.answer_relevance import answer_relevance
+
+# In-memory store: run_id -> EvalRunResult
+EVAL_STORE: Dict[str, EvalRunResult] = {}
+
+def run_evaluation(request: EvaluateRequest) -> EvalRunResult:
+    """
+    Full evaluation pipeline:
+    1. For each sample: run RAG pipeline, compute metrics.
+    2. Aggregate scores.
+    3. Store and return EvalRunResult.
+    """
+    run_id = str(uuid.uuid4())[:8]
+    sample_results = []
+    enabled = set(request.metrics)
+
+    for sample in request.dataset:
+        answer, contexts, latency_ms = run_rag_pipeline(
+            sample.question, namespace=request.namespace
+        )
+        result = SampleResult(
+            question=sample.question,
+            generated_answer=answer,
+            retrieved_contexts=contexts,
+            ground_truth_answer=sample.ground_truth_answer,
+            faithfulness=faithfulness(answer, contexts) if "faithfulness" in enabled else None,
+            context_precision=context_precision(sample.question, contexts) if "context_precision" in enabled else None,
+            context_recall=context_recall(sample.ground_truth_contexts, contexts) if "context_recall" in enabled else None,
+            answer_relevance=answer_relevance(sample.question, answer) if "answer_relevance" in enabled else None,
+            latency_ms=round(latency_ms, 2),
+        )
+        sample_results.append(result)
+
+    def mean(vals): return round(sum(v for v in vals if v is not None) / max(1, sum(1 for v in vals if v is not None)), 4)
+
+    aggregate = AggregateScores(
+        faithfulness=mean([r.faithfulness for r in sample_results]),
+        context_precision=mean([r.context_precision for r in sample_results]),
+        context_recall=mean([r.context_recall for r in sample_results]),
+        answer_relevance=mean([r.answer_relevance for r in sample_results]),
+        avg_latency_ms=mean([r.latency_ms for r in sample_results]),
+        num_samples=len(sample_results),
+    )
+
+    run_result = EvalRunResult(
+        run_id=run_id,
+        run_name=request.run_name,
+        created_at=datetime.now(timezone.utc),
+        aggregate=aggregate,
+        samples=sample_results,
+        status="completed",
+    )
+    EVAL_STORE[run_id] = run_result
+    return run_result
+ 
+7. FastAPI Routers & Main App
+7.1 routers/ingest_router.py
+from fastapi import APIRouter, HTTPException
+from models.requests import IngestTextRequest
+from backend.ingest import ingest_text
+
+router = APIRouter(prefix="/api", tags=["ingest"])
+
+@router.post("/ingest")
+async def ingest_endpoint(body: IngestTextRequest):
+    """
+    Ingest raw text into Pinecone.
+    Chunks the text, embeds with sentence-transformers, upserts to Pinecone.
+    Returns: { "chunks_ingested": int, "namespace": str }
+    """
+    try:
+        result = ingest_text(body.text, namespace=body.namespace, metadata=body.metadata)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+7.2 routers/evaluate_router.py
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from models.requests import EvaluateRequest
+from evaluator.runner import run_evaluation
+
+router = APIRouter(prefix="/api", tags=["evaluate"])
+
+@router.post("/evaluate")
+async def evaluate_endpoint(body: EvaluateRequest):
+    """
+    Run a full evaluation suite on the provided dataset.
+    Synchronous — waits for all metrics to complete.
+    Returns: EvalRunResult (full JSON)
+    Warning: for large datasets (>20 samples), expect 30-120s response time due to LLM calls.
+    """
+    try:
+        result = run_evaluation(body)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+7.3 routers/results_router.py
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from evaluator.runner import EVAL_STORE
+import csv, io
+
+router = APIRouter(prefix="/api", tags=["results"])
+
+@router.get("/results")
+async def list_results():
+    """Return list of all run IDs and their aggregate scores."""
+    return [
+        {"run_id": k, "run_name": v.run_name, "created_at": v.created_at, "aggregate": v.aggregate}
+        for k, v in EVAL_STORE.items()
+    ]
+
+@router.get("/results/{run_id}")
+async def get_result(run_id: str):
+    """Return full evaluation result for a specific run."""
+    result = EVAL_STORE.get(run_id)
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Run {run_id!r} not found")
+    return result
+
+@router.get("/results/{run_id}/export/csv")
+async def export_csv(run_id: str):
+    """Export per-sample results as CSV download."""
+    result = EVAL_STORE.get(run_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Run not found")
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=[
+        "question","generated_answer","faithfulness","context_precision",
+        "context_recall","answer_relevance","latency_ms"
+    ])
+    writer.writeheader()
+    for s in result.samples:
+        writer.writerow({
+            "question": s.question, "generated_answer": s.generated_answer,
+            "faithfulness": s.faithfulness, "context_precision": s.context_precision,
+            "context_recall": s.context_recall, "answer_relevance": s.answer_relevance,
+            "latency_ms": s.latency_ms
+        })
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.read()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=rageval_{run_id}.csv"}
+    )
+
+7.4 main.py — Full Entrypoint
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from config import validate_config, CONFIG
+from routers.ingest_router import router as ingest_router
+from routers.evaluate_router import router as evaluate_router
+from routers.results_router import router as results_router
+import uvicorn
+
+validate_config()
+
+app = FastAPI(
+    title="RAGEval — RAG Evaluation Framework",
+    description="Benchmark any RAG pipeline with 5 automated metrics",
+    version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(ingest_router)
+app.include_router(evaluate_router)
+app.include_router(results_router)
+
+# Serve frontend
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
+
+@app.get("/")
+async def root():
+    return FileResponse("frontend/index.html")
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "version": "1.0.0"}
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host=CONFIG["HOST"], port=CONFIG["PORT"], reload=True)
+ 
+8. Frontend Dashboard — frontend/index.html
+The entire frontend is a single HTML file. No build step, no npm install, no React. It uses vanilla JavaScript with fetch() calls to the FastAPI backend. It is served directly by FastAPI as a static file.
+
+8.1 Visual Design Specification
+•	Theme: Dark terminal/observatory aesthetic — near-black background (#0D1117), electric blue accents (#1B8DBF), teal green for positive scores (#00C2A8), orange/rust for warnings (#E05A2B)
+•	Font: "JetBrains Mono" from Google Fonts for all text — monospaced technical aesthetic reinforces "developer tool" positioning
+•	Layout: Three-panel design — left sidebar (navigation + quick stats), main content area (active view), top header strip (title + status indicator)
+•	Score visualisation: Each metric displayed as an animated circular arc gauge (pure CSS + SVG), colour-coded green > 0.7, yellow 0.4–0.7, red < 0.4
+•	Sample table: Expandable rows — click any row to expand and see the full question, generated answer, retrieved contexts, and ground truth
+•	No external JS libraries except Chart.js (loaded from cdnjs) for the radar chart overview
+
+8.2 Page Views (Single-Page, Tab-Switched)
+View / Tab	Content	API Calls Made
+Dashboard (default)	Summary cards for latest run: 5 metric gauges, radar chart of all metrics, run metadata	GET /api/results (latest)
+Run Evaluator	Form to paste JSON eval dataset + namespace selector + run name input + "Run Evaluation" button + live progress indicator	POST /api/evaluate
+Ingest Corpus	Textarea to paste text corpus + namespace selector + "Ingest" button + stats on completion	POST /api/ingest
+History	Table of all past runs: run_id, run_name, timestamp, aggregate scores. Click row to load that run on Dashboard.	GET /api/results
+Sample Explorer	Full expandable table of all per-sample results for the selected run. Export CSV button in top right.	GET /api/results/{run_id}/export/csv
+
+8.3 Key JavaScript Functions to Implement
+These are the exact function names the agent must implement in the <script> section of index.html:
+
+async function fetchLatestRun()        // GET /api/results, get most recent run_id, load it
+async function loadRun(runId)           // GET /api/results/{runId}, populate all UI panels
+async function runEvaluation()          // POST /api/evaluate with form data, show spinner, reload
+async function ingestCorpus()           // POST /api/ingest, show result toast
+async function loadHistory()            // GET /api/results, populate history table
+async function exportCSV(runId)         // Navigate to /api/results/{runId}/export/csv
+function renderGauge(elementId, score)  // Draw SVG arc gauge for a 0.0-1.0 score
+function renderRadarChart(scores)       // Render Chart.js radar of all 5 metrics
+function renderSampleTable(samples)     // Render expandable table rows
+function showToast(message, type)       // Show top-right toast (type: success|error|info)
+function switchTab(tabName)             // Toggle active tab view
+function scoreColor(score)              // Returns CSS color string based on score value
+
+8.4 JSON Format for Run Evaluator Form
+The "Run Evaluator" tab must show this example JSON in a placeholder so users know the expected format:
+
+{
+  "run_name": "baseline-v1",
+  "namespace": "default",
+  "dataset": [
+    {
+      "question": "What is the capital of France?",
+      "ground_truth_answer": "Paris",
+      "ground_truth_contexts": ["France is a country in Western Europe. Its capital is Paris."]
+    }
+  ]
+}
+ 
+9. Sample Data Files
+9.1 sample_data/sample_corpus.txt
+The agent must create this file. It is used for the demo run. It must contain at least 8 substantial paragraphs on a single coherent topic. Use the following content exactly:
+
+Artificial intelligence (AI) refers to the simulation of human intelligence processes
+by computer systems. These processes include learning (acquiring information and rules
+for using the information), reasoning (using rules to reach conclusions), and
+self-correction. Particular applications of AI include expert systems, speech
+recognition, and machine vision.
+
+Machine learning is a subset of artificial intelligence that provides systems the
+ability to automatically learn and improve from experience without being explicitly
+programmed. Machine learning focuses on the development of computer programs that
+can access data and use it to learn for themselves.
+
+Deep learning is part of a broader family of machine learning methods based on
+artificial neural networks with representation learning. Learning can be supervised,
+semi-supervised or unsupervised. Deep learning architectures such as convolutional
+neural networks have produced results comparable to human experts in tasks like
+image classification.
+
+Natural language processing (NLP) is a subfield of linguistics, computer science,
+and artificial intelligence concerned with the interactions between computers and
+human language, in particular how to program computers to process and analyze large
+amounts of natural language data.
+
+Retrieval-Augmented Generation (RAG) is an AI framework that combines a retrieval
+component with a generative language model. The retrieval component finds relevant
+documents from a knowledge base, which are then provided as context to the language
+model to generate accurate, grounded responses.
+
+Vector databases store data as high-dimensional vectors, enabling semantic similarity
+search. They are widely used in RAG systems to find contextually relevant documents.
+Popular vector databases include Pinecone, Weaviate, Chroma, and Qdrant.
+
+Large language models (LLMs) such as GPT-4, Claude, and Llama are neural networks
+trained on vast amounts of text data. They can generate coherent text, answer
+questions, translate languages, and perform many other language tasks.
+
+Prompt engineering is the practice of designing and refining the input prompts
+given to language models to elicit desired outputs. Effective prompt engineering
+can significantly improve model performance without any model retraining.
+
+9.2 sample_data/sample_eval_dataset.json
+The agent must create this file. It is the evaluation dataset used for the demo run.
+
+[
+  {
+    "question": "What is machine learning?",
+    "ground_truth_answer": "Machine learning is a subset of artificial intelligence that enables systems to learn and improve from experience without explicit programming.",
+    "ground_truth_contexts": ["Machine learning is a subset of artificial intelligence that provides systems the ability to automatically learn and improve from experience without being explicitly programmed."]
+  },
+  {
+    "question": "What is Retrieval-Augmented Generation?",
+    "ground_truth_answer": "RAG is an AI framework that combines a retrieval component with a generative language model to produce accurate, grounded responses.",
+    "ground_truth_contexts": ["Retrieval-Augmented Generation (RAG) is an AI framework that combines a retrieval component with a generative language model."]
+  },
+  {
+    "question": "What are vector databases used for?",
+    "ground_truth_answer": "Vector databases store high-dimensional vectors for semantic similarity search and are used in RAG systems to find relevant documents.",
+    "ground_truth_contexts": ["Vector databases store data as high-dimensional vectors, enabling semantic similarity search. They are widely used in RAG systems."]
+  },
+  {
+    "question": "What is deep learning?",
+    "ground_truth_answer": "Deep learning is a subset of machine learning based on artificial neural networks that can match human expert performance on tasks like image classification.",
+    "ground_truth_contexts": ["Deep learning is part of a broader family of machine learning methods based on artificial neural networks with representation learning."]
+  },
+  {
+    "question": "What is prompt engineering?",
+    "ground_truth_answer": "Prompt engineering is designing and refining input prompts for language models to improve outputs without retraining.",
+    "ground_truth_contexts": ["Prompt engineering is the practice of designing and refining the input prompts given to language models to elicit desired outputs."]
+  }
+]
+
+9.3 scripts/run_sample_eval.py
+A standalone script that runs the full end-to-end demo: ingest sample corpus, then run eval on sample dataset. Run with: python scripts/run_sample_eval.py
+
+import json, sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from config import validate_config
+from backend.ingest import ingest_text
+from models.requests import EvaluateRequest, EvalSample
+from evaluator.runner import run_evaluation
+
+validate_config()
+
+# 1. Ingest corpus
+print("Ingesting sample corpus into Pinecone...")
+with open("sample_data/sample_corpus.txt") as f:
+    text = f.read()
+stats = ingest_text(text, namespace="demo")
+print(f"Ingested: {stats}")
+
+# 2. Load eval dataset
+with open("sample_data/sample_eval_dataset.json") as f:
+    raw = json.load(f)
+dataset = [EvalSample(**item) for item in raw]
+
+# 3. Run evaluation
+print("Running evaluation (this takes ~60s due to LLM calls)...")
+request = EvaluateRequest(dataset=dataset, namespace="demo", run_name="sample-demo")
+result = run_evaluation(request)
+
+# 4. Print results
+print("\n=== AGGREGATE SCORES ===")
+agg = result.aggregate
+print(f"  Faithfulness:      {agg.faithfulness:.4f}")
+print(f"  Context Precision: {agg.context_precision:.4f}")
+print(f"  Context Recall:    {agg.context_recall:.4f}")
+print(f"  Answer Relevance:  {agg.answer_relevance:.4f}")
+print(f"  Avg Latency:       {agg.avg_latency_ms:.1f} ms")
+print(f"\nFull result saved to run_id: {result.run_id}")
+ 
+10. README.md — Full Content
+The agent must create README.md at the project root with the following content. This README is a portfolio asset and must be compelling.
+
+# RAGEval — Production RAG Evaluation Framework
+
+A developer tool that benchmarks any RAG pipeline across 5 automated metrics.
+Built with FastAPI + Groq + Pinecone + sentence-transformers.
+
+## What It Measures
+
+| Metric            | What It Detects                                      |
+|-------------------|------------------------------------------------------|
+| Faithfulness      | Hallucinations — claims not grounded in context      |
+| Context Precision | Retriever noise — irrelevant chunks being fetched    |
+| Context Recall    | Retriever gaps — missing relevant chunks             |
+| Answer Relevance  | Off-topic answers — topical drift from the question  |
+| Latency           | End-to-end response time per query                   |
+
+## Quick Start
+
+```bash
+git clone https://github.com/itstharusha/rageval
+cd rageval
+pip install -r requirements.txt
+cp .env.example .env    # fill in GROQ_API_KEY and PINECONE_API_KEY
+python main.py          # dashboard at http://localhost:8000
+```
+
+## Run the Demo
+
+```bash
+python scripts/run_sample_eval.py
+```
+
+## API Reference
+
+| Endpoint                        | Method | Description                     |
+|---------------------------------|--------|---------------------------------|
+| /api/ingest                     | POST   | Ingest text corpus into Pinecone|
+| /api/evaluate                   | POST   | Run full eval suite             |
+| /api/results                    | GET    | List all evaluation runs        |
+| /api/results/{run_id}           | GET    | Get full run result             |
+| /api/results/{run_id}/export/csv| GET    | Export results as CSV           |
+| /docs                           | GET    | Auto-generated Swagger UI       |
+
+## Architecture
+
+```
+User → FastAPI → [Ingest] → Pinecone (vectors)
+              → [Evaluate]
+                    → RAG Pipeline (retrieve + generate via Groq)
+                    → Evaluator (faithfulness, precision, recall, relevance, latency)
+                    → EvalRunResult → in-memory store
+              → [Dashboard] → frontend/index.html reads /api/results
+```
+
+## Benchmark Results (Sample Corpus)
+
+| Metric            | Score  |
+|-------------------|--------|
+| Faithfulness      | 0.87   |
+| Context Precision | 0.82   |
+| Context Recall    | 0.79   |
+| Answer Relevance  | 0.91   |
+| Avg Latency       | 1240ms |
+
+> Note: Scores vary based on corpus quality and query complexity.
+
+## Tech Stack
+FastAPI · Groq (llama-3.3-70b-versatile) · Pinecone Serverless · sentence-transformers · Python 3.11+
+ 
+11. .gitignore Content
+The agent must create .gitignore at the project root with the following content:
+
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+node_modules/
+*.log
+data/
+.DS_Store
+*.ipynb_checkpoints
+
+ 
+12. Agent Execution Instructions
+These are the exact steps the coding agent must follow to build the project. Do not skip or reorder steps.
+
+12.1 Step-by-Step Build Order
+1.	Create the top-level directory rag-eval-framework/ if it does not already exist.
+2.	Create .env.example with the content from Section 3.1.
+3.	Create .gitignore with the content from Section 11.
+4.	Create config.py with the full implementation from Section 3.2.
+5.	Create all __init__.py files (empty) for: backend/, evaluator/, routers/, models/.
+6.	Create models/requests.py with the full implementation from Section 4.1.
+7.	Create models/responses.py with the full implementation from Section 4.2.
+8.	Create backend/ingest.py with the full implementation from Section 5.1.
+9.	Create backend/retriever.py with the full implementation from Section 5.2.
+10.	Create backend/generator.py with the full implementation from Section 5.3.
+11.	Create backend/pipeline.py with the full implementation from Section 5.4.
+12.	Create evaluator/faithfulness.py with the full implementation from Section 6.1.
+13.	Create evaluator/context_precision.py with the full implementation from Section 6.2.
+14.	Create evaluator/context_recall.py with the full implementation from Section 6.3.
+15.	Create evaluator/answer_relevance.py with the full implementation from Section 6.4.
+16.	Create evaluator/runner.py with the full implementation from Section 6.5.
+17.	Create routers/ingest_router.py with the full implementation from Section 7.1.
+18.	Create routers/evaluate_router.py with the full implementation from Section 7.2.
+19.	Create routers/results_router.py with the full implementation from Section 7.3.
+20.	Create main.py with the full implementation from Section 7.4.
+21.	Create frontend/index.html — dark terminal aesthetic, all 5 tabs, all JS functions from Section 8. This is a full implementation, not a placeholder. All fetch calls must use relative URLs (e.g. /api/evaluate, not http://localhost:8000/api/evaluate).
+22.	Create sample_data/sample_corpus.txt with the content from Section 9.1.
+23.	Create sample_data/sample_eval_dataset.json with the content from Section 9.2.
+24.	Create scripts/run_sample_eval.py with the full implementation from Section 9.3.
+25.	Create README.md with the full content from Section 10.
+26.	Verify requirements.txt exists and contains all packages from Section 1 preamble. Do not add new packages unless they are already in requirements.txt.
+
+12.2 Critical Rules the Agent Must Follow
+⚑  Never use os.getenv() directly in any file except config.py. Always import CONFIG from config.py.
+⚑  Never hardcode API keys, model names, or index names anywhere. All come from CONFIG.
+⚑  The frontend must be a single file — frontend/index.html — with all CSS and JavaScript inline. Do not create separate .css or .js files.
+⚑  All metric functions must return a Python float between 0.0 and 1.0. Never return None from a metric function — return 0.0 on error.
+⚑  The LLM-as-judge prompts must instruct the model to respond with ONLY "yes" or "no" (for verification steps) or ONLY a JSON array (for decomposition). No explanation, no preamble. The parse logic assumes this.
+⚑  run_evaluation() in evaluator/runner.py is synchronous. Do not use asyncio or background tasks — the endpoint waits for completion and returns the full result.
+⚑  Do not modify requirements.txt. All needed packages are already listed.
+⚑  The Pinecone index dimension must be 384 — this matches all-MiniLM-L6-v2. Do not change this.
+⚑  In frontend/index.html, all API calls use fetch() with await. Always parse response as JSON with await response.json(). Always wrap in try/catch and call showToast(error.message, "error") on failure.
+
+12.3 Verification Checklist
+After building, the agent must verify:
+
+•	Every file listed in Section 2 exists at the correct path
+•	python main.py starts without import errors
+•	GET http://localhost:8000/health returns {"status": "ok"}
+•	GET http://localhost:8000/ returns the dashboard HTML
+•	GET http://localhost:8000/docs shows Swagger UI with all 5 endpoints
+•	All __init__.py files are present in backend/, evaluator/, routers/, models/
+•	No file imports os.getenv directly — all use from config import CONFIG
+•	frontend/index.html contains all 5 tab views and all 10 JS functions from Section 8.3
+
