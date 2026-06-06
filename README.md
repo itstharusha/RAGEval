@@ -65,3 +65,12 @@ User → FastAPI → [Ingest] → Pinecone (vectors)
 
 ## Tech Stack
 FastAPI · Groq (llama-3.3-70b-versatile) · Pinecone Serverless · sentence-transformers · Python 3.11+
+
+## Preview
+<img width="1919" height="1079" alt="Screenshot 2026-06-06 174918" src="https://github.com/user-attachments/assets/0b05e54d-f7b2-47a0-8684-b2f8bc2e6830" />
+<img width="1919" height="1079" alt="Screenshot 2026-06-06 181146" src="https://github.com/user-attachments/assets/85d93574-257e-4f02-8bfb-6423aac78845" />
+<img width="1919" height="1079" alt="Screenshot 2026-06-06 181221" src="https://github.com/user-attachments/assets/90f3232c-de4a-4fb5-a6ac-147503db892a" />
+<img width="1919" height="1079" alt="Screenshot 2026-06-06 181648" src="https://github.com/user-attachments/assets/3fc7ca09-f264-4e29-b21e-5b185563c076" />
+<img width="1919" height="1079" alt="Screenshot 2026-06-06 181656" src="https://github.com/user-attachments/assets/53eefdee-536d-4c1f-8d39-77bfc5d5f70f" />
+
+
