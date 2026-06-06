@@ -984,6 +984,10 @@
                 if (!res.ok) throw new Error(res.statusText);
                 const runs = await res.json();
                 allRuns = runs || [];
+
+                // Bug fix 1 & 2: Always populate History and Explorer from real data
+                populateHistory(allRuns);
+                populateExplorerDropdown();
                 
                 if (allRuns.length > 0) {
                     const latest = allRuns[0];
@@ -1060,30 +1064,79 @@
         }
 
         async function runEvaluation() {
+            const rawJson = document.getElementById('eval-dataset').value.trim();
+            let payload;
+            try {
+                payload = JSON.parse(rawJson);
+            } catch (err) {
+                showToast('Invalid JSON: ' + err.message, 'error');
+                return;
+            }
+            // Merge namespace and run_name from the dedicated fields
+            payload.namespace = document.getElementById('eval-namespace').value || 'default';
+            payload.run_name = document.getElementById('eval-runname').value || payload.run_name || '';
+
             document.getElementById('eval-btn').disabled = true;
             document.getElementById('eval-progress').style.display = 'block';
-            
-            setTimeout(() => {
+
+            try {
+                const res = await fetch(`${API_BASE}/evaluate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ detail: res.statusText }));
+                    throw new Error(err.detail || res.statusText);
+                }
+                const result = await res.json();
                 showToast('Evaluation completed successfully', 'success');
+                document.getElementById('eval-dataset').value = '';
+                // Refresh all tabs with real data
+                await fetchLatestRun();
+                // Ensure the newly returned run is displayed on the dashboard
+                if (result.run_id) await loadRun(result.run_id);
+                switchTab('dashboard');
+            } catch (e) {
+                showToast('Evaluation failed: ' + e.message, 'error');
+            } finally {
                 document.getElementById('eval-btn').disabled = false;
                 document.getElementById('eval-progress').style.display = 'none';
-                document.getElementById('eval-dataset').value = '';
-                mockDataFallback(); 
-                switchTab('dashboard');
-            }, 1500);
+            }
         }
 
         async function ingestCorpus() {
+            const text = document.getElementById('ingest-text').value.trim();
+            const namespace = document.getElementById('ingest-namespace').value || 'default';
+            if (!text) {
+                showToast('Please enter a text corpus.', 'error');
+                return;
+            }
+
             document.getElementById('ingest-btn').disabled = true;
             document.getElementById('ingest-progress').style.display = 'block';
 
-            setTimeout(() => {
+            try {
+                const res = await fetch(`${API_BASE}/ingest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, namespace })
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ detail: res.statusText }));
+                    throw new Error(err.detail || res.statusText);
+                }
+                const result = await res.json();
+                document.getElementById('ingest-result').style.display = 'block';
+                document.getElementById('ingest-result').innerHTML =
+                    `Successfully ingested <strong>${result.chunks_ingested ?? '?'}</strong> chunks into namespace <strong>${result.namespace ?? namespace}</strong>`;
+                showToast('Corpus ingested successfully', 'success');
+            } catch (e) {
+                showToast('Ingest failed: ' + e.message, 'error');
+            } finally {
                 document.getElementById('ingest-btn').disabled = false;
                 document.getElementById('ingest-progress').style.display = 'none';
-                document.getElementById('ingest-result').style.display = 'block';
-                document.getElementById('ingest-result').innerHTML = `Successfully ingested <strong>240</strong> chunks into namespace <strong>default</strong>`;
-                showToast('Corpus ingested successfully', 'success');
-            }, 1200);
+            }
         }
 
         function populateHistory(runs) {
@@ -1198,7 +1251,7 @@
             });
         }
 
-        document.getElementById('explorer-run-select').addEventListener('change', (e) => {
+        document.getElementById('explorer-run-select').addEventListener('change', async (e) => {
             const runId = e.target.value;
             if (!runId) {
                 document.getElementById('explorer-table-wrapper').style.display = 'none';
@@ -1206,13 +1259,30 @@
                 document.getElementById('no-explorer').style.display = 'block';
                 return;
             }
-            
-            if(currentRun && currentRun.samples) {
-                renderSampleTable(currentRun.samples);
-                document.getElementById('explorer-table-wrapper').style.display = 'block';
-                document.getElementById('export-csv-btn').style.display = 'inline-block';
-                document.getElementById('no-explorer').style.display = 'none';
+
+            // Bug fix 3: Fetch the selected run's full data (including samples) from the API
+            try {
+                const res = await fetch(`${API_BASE}/results/${runId}`);
+                if (!res.ok) throw new Error(res.statusText);
+                const run = await res.json();
+                if (run && run.samples && run.samples.length > 0) {
+                    renderSampleTable(run.samples);
+                    document.getElementById('explorer-table-wrapper').style.display = 'block';
+                    document.getElementById('export-csv-btn').style.display = 'inline-block';
+                    document.getElementById('no-explorer').style.display = 'none';
+                } else {
+                    document.getElementById('no-explorer').textContent = 'No samples found for this run.';
+                    document.getElementById('no-explorer').style.display = 'block';
+                    document.getElementById('explorer-table-wrapper').style.display = 'none';
+                }
+            } catch (err) {
+                showToast('Failed to load run samples: ' + err.message, 'error');
             }
+        });
+
+        document.getElementById('export-csv-btn').addEventListener('click', () => {
+            const runId = document.getElementById('explorer-run-select').value;
+            if (runId) window.location.href = `${API_BASE}/results/${runId}/export/csv`;
         });
 
         window.addEventListener('load', () => {
