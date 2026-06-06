@@ -1,9 +1,9 @@
-# Set Python as the primary language for this repository
-*.py linguist-language=Python
-
-# Mark non-code files as vendored (don't count toward language stats)
+# GitHub language detection
+# Mark frontend HTML/JS and sample data as vendored
+frontend/ linguist-vendored
+sample_data/ linguist-vendored
 *.html linguist-vendored
 *.json linguist-vendored
-*.txt linguist-vendored
-frontend/** linguist-vendored
-sample_data/** linguist-vendored
+
+# Ensure Python files are counted
+*.py linguist-language=Python -linguist-vendored
